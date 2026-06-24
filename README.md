@@ -1,7 +1,7 @@
 
 # Intro
 
-A light weight rtc generator, plays a doorbell chime so host and vistors can find each other.
+A light weight rtc generator, plays a doorbell chime so host and visitors can find each other.
 
 
 ## Link 
