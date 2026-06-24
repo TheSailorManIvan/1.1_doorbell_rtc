@@ -72,7 +72,7 @@ function broadcast(roomId, data) {
   const room = rooms.get(roomId);
   if (!room) return;
 
-  if (data.type === 'message') {
+  if (data.type === 'message' || data.type === 'ring') {
     room.history.push(data);
     room.history = room.history.slice(-MAX_ROOM_HISTORY);
   }
@@ -162,7 +162,8 @@ async function handlePostEvent(roomId, req, res) {
   try {
     const data = await readJsonBody(req);
     const sender = data.sender === 'host' ? 'host' : 'visitor';
-    const type = data.type === 'presence' ? 'presence' : 'message';
+    const allowedTypes = new Set(['message', 'presence', 'ring']);
+    const type = allowedTypes.has(data.type) ? data.type : 'message';
     const text = typeof data.text === 'string' ? data.text.trim().slice(0, 1000) : '';
 
     if (type === 'message' && !text) {
