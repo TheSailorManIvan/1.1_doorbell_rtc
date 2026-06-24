@@ -270,12 +270,19 @@ document.addEventListener('DOMContentLoaded', () => {
   async function uploadCurrentPhoto(file) {
     if (!connected || !file) return;
 
+    // Client-side guard for very large files
+    if (file.size > 6 * 1024 * 1024) {
+      alert('Photo is very large (>6MB). Please choose a smaller image (under 5MB recommended).');
+      photoInput.value = '';
+      return;
+    }
+
     try {
       uploadPhotoBtn.disabled = true;
       uploadPhotoBtn.textContent = 'Processing...';
 
-      // Resize/compress image client-side before upload
-      const resizedDataUrl = await resizeImage(file, 1200, 0.72);
+      // Resize/compress image client-side before upload (aim for good quality up to ~5MB originals)
+      const resizedDataUrl = await resizeImage(file, 1600, 0.82);
 
       uploadPhotoBtn.textContent = 'Uploading...';
 
@@ -314,6 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
       img.onload = () => {
         let { width, height } = img;
 
+        // Downscale if needed
         if (width > maxWidth) {
           height = Math.round(height * (maxWidth / width));
           width = maxWidth;
@@ -325,7 +333,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        let dataUrl = canvas.toDataURL('image/jpeg', quality);
+
+        // If still too big after first pass, reduce quality further
+        if (dataUrl.length > 5.5 * 1024 * 1024) {
+          dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        }
+
         resolve(dataUrl);
       };
 

@@ -254,7 +254,7 @@ async function handlePostEvent(roomId, req, res) {
 async function handlePhotoUpload(roomId, req, res) {
   try {
     // Allow much larger body for images (base64 encoded)
-    const data = await readJsonBody(req, 5 * 1024 * 1024); // ~5MB max JSON body
+    const data = await readJsonBody(req, 8 * 1024 * 1024); // ~8MB max JSON body (supports up to ~5-6MB images)
     const sender = data.sender === 'host' ? 'host' : 'visitor';
 
     if (!data.image || typeof data.image !== 'string') {
@@ -268,11 +268,11 @@ async function handlePhotoUpload(roomId, req, res) {
       return;
     }
 
-    // Size check after client-side resizing (limit ~1.5MB image)
+    // Size check (allow up to ~5MB after base64)
     const base64Length = data.image.length - data.image.indexOf(',') - 1;
     const approxBytes = Math.floor(base64Length * 0.75);
-    if (approxBytes > 1.5 * 1024 * 1024) {
-      sendJson(res, 400, { error: 'Photo too large (max ~1.5MB after compression)' });
+    if (approxBytes > 5 * 1024 * 1024) {
+      sendJson(res, 400, { error: 'Photo too large (max 5MB)' });
       return;
     }
 
