@@ -97,6 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const startSection = document.getElementById('start-section');
   const startBtn = document.getElementById('start-btn');
+  const profilesSection = document.getElementById('profiles-section');
   const generateBtn = document.getElementById('generate-btn');
   const linkDisplay = document.getElementById('link-display');
   const homeownerSection = document.getElementById('homeowner-section');
@@ -466,6 +467,7 @@ document.addEventListener('DOMContentLoaded', () => {
   startBtn.addEventListener('click', () => {
     enableSoundQuietly();
     startSection.style.display = 'none';
+    profilesSection.style.display = 'flex';
     soundSection.style.display = 'block';
 
     if (isVisitor) {

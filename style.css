@@ -24,6 +24,7 @@ h1 {
 
 /* Panels */
 #start-section,
+#profiles-section,
 #homeowner-section,
 #visitor-section {
   background: white;
@@ -43,6 +44,43 @@ h1 {
 #start-btn {
   font-size: 20px;
   padding: 14px 26px;
+}
+
+#profiles-section {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  padding: 18px 25px;
+}
+
+.profile-card {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 700;
+  color: #526173;
+}
+
+.profile-avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  border: 4px solid #1a73e8;
+  background: white;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 255%;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.14);
+}
+
+.host-avatar {
+  background-image: url("1%20Pictures/3.png");
+}
+
+.visitor-avatar {
+  background-image: url("1%20Pictures/4.jpg");
 }
 
 #sound-section {

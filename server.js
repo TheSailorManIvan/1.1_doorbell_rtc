@@ -85,7 +85,15 @@ function broadcast(roomId, data) {
 
 function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  const requestedPath = url.pathname === '/' ? '/index.html' : url.pathname;
+  let requestedPath = '/index.html';
+
+  try {
+    requestedPath = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
+  } catch {
+    sendJson(res, 400, { error: 'Invalid path' });
+    return;
+  }
+
   const filePath = path.normalize(path.join(PUBLIC_DIR, requestedPath));
 
   if (!filePath.startsWith(PUBLIC_DIR)) {
