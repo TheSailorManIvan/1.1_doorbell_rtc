@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
+const QRCode = require('qrcode');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || (process.env.RENDER ? '0.0.0.0' : '127.0.0.1');
@@ -27,6 +28,34 @@ function sendJson(res, statusCode, body) {
     'Cache-Control': 'no-store'
   });
   res.end(JSON.stringify(body));
+}
+
+async function sendQrCode(res, text) {
+  if (!text || text.length > 2000) {
+    sendJson(res, 400, { error: 'QR text is required and must be shorter than 2000 characters' });
+    return;
+  }
+
+  try {
+    const svg = await QRCode.toString(text, {
+      type: 'svg',
+      errorCorrectionLevel: 'H',
+      margin: 2,
+      width: 240,
+      color: {
+        dark: '#111827',
+        light: '#ffffff'
+      }
+    });
+
+    res.writeHead(200, {
+      'Content-Type': 'image/svg+xml; charset=utf-8',
+      'Cache-Control': 'no-store'
+    });
+    res.end(svg);
+  } catch (error) {
+    sendJson(res, 500, { error: 'Could not generate QR code' });
+  }
 }
 
 function getRoomClients(roomId) {
@@ -161,6 +190,11 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === '/health') {
     sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (url.pathname === '/api/qr.svg') {
+    sendQrCode(res, url.searchParams.get('text'));
     return;
   }
 

@@ -17,19 +17,19 @@ function showQRCode(link) {
 
   container.innerHTML = '';
 
-  if (!window.QRCode) {
-    container.textContent = 'QR code needs internet for the QR library. The link still works.';
-    return;
-  }
+  const qrImage = document.createElement('img');
+  qrImage.alt = 'QR code for the visitor doorbell link';
+  qrImage.src = `/api/qr.svg?text=${encodeURIComponent(link)}`;
+  qrImage.width = 240;
+  qrImage.height = 240;
 
-  new QRCode(container, {
-    text: link,
-    width: 200,
-    height: 200,
-    colorDark: '#000000',
-    colorLight: '#ffffff',
-    correctLevel: QRCode.CorrectLevel.H
-  });
+  const openLink = document.createElement('a');
+  openLink.href = link;
+  openLink.textContent = 'Open visitor link';
+  openLink.target = '_blank';
+  openLink.rel = 'noopener';
+
+  container.append(qrImage, openLink);
 }
 
 function appendMessage(chatHistory, text, className = '') {

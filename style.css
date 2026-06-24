@@ -83,13 +83,26 @@ input[readonly] {
 
 /* QR section */
 #qrcode {
-  text-align: center;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin: 20px 0;
+  text-align: center;
 }
 
-#qrcode img,
-#qrcode canvas {
-  margin: auto;
+#qrcode img {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  height: 240px;
+  padding: 12px;
+  width: 240px;
+}
+
+#qrcode a {
+  color: #1a73e8;
+  font-weight: 600;
 }
 
 /* Message container */
@@ -148,5 +161,4 @@ input[readonly] {
   }
 
 }
-
 
