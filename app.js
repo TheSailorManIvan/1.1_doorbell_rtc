@@ -115,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let ringCooldownUntil = 0;
   let activeRingInterval = null;
   let activeRingTimeout = null;
+  let soundWasEnabled = false;
   const seenMessageIds = new Set();
 
   function setVisitorControlsEnabled(enabled) {
@@ -124,7 +125,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function setSoundButtonEnabled(enabled) {
-    enableSoundBtn.disabled = !enabled;
+    soundWasEnabled = enabled;
+    enableSoundBtn.disabled = enabled;
     enableSoundBtn.textContent = enabled ? 'Sound Enabled' : 'Enable Sound';
   }
 
@@ -162,6 +164,16 @@ document.addEventListener('DOMContentLoaded', () => {
     setSoundButtonEnabled(true);
   }
 
+  function enableSoundQuietly() {
+    if (soundWasEnabled) return;
+
+    enableSound()
+      .then(() => {
+        enableSoundBtn.textContent = 'Sound Ready';
+      })
+      .catch(() => {});
+  }
+
   function playTone(frequencies, duration = 0.18, gap = 0.08) {
     if (!audioContext || audioContext.state !== 'running') return false;
 
@@ -197,6 +209,11 @@ document.addEventListener('DOMContentLoaded', () => {
       window.clearTimeout(activeRingTimeout);
       activeRingTimeout = null;
     }
+  }
+
+  function stopRingBecauseUserResponded() {
+    stopRingSequence();
+    document.body.classList.remove('ring-alert');
   }
 
   function playRingSequence(frequencies, options = {}) {
@@ -430,7 +447,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  document.addEventListener('pointerdown', enableSoundQuietly, { once: true });
+  document.addEventListener('keydown', enableSoundQuietly, { once: true });
+
+  messageInput.addEventListener('input', stopRingBecauseUserResponded);
+
   messageInput.addEventListener('keydown', (event) => {
+    stopRingBecauseUserResponded();
     if (event.key === 'Enter') sendBtn.click();
   });
 

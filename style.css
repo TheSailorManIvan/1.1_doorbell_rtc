@@ -23,7 +23,6 @@ h1 {
 }
 
 /* Panels */
-#sound-section,
 #homeowner-section,
 #visitor-section {
   background: white;
@@ -34,8 +33,30 @@ h1 {
 }
 
 #sound-section {
-  padding: 16px 25px;
+  opacity: 0.72;
+  padding: 0 0 20px;
   text-align: center;
+}
+
+#sound-section:hover,
+#sound-section:focus-within {
+  opacity: 1;
+}
+
+#enable-sound-btn {
+  background-color: #eef2f7;
+  color: #526173;
+  font-size: 14px;
+  padding: 8px 12px;
+}
+
+#enable-sound-btn:hover {
+  background-color: #dfe7f0;
+}
+
+#enable-sound-btn:disabled {
+  background-color: #f5f7fa;
+  color: #7b8794;
 }
 
 /* Buttons */
