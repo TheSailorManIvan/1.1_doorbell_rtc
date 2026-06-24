@@ -174,12 +174,12 @@ input[readonly] {
 
 .host-mode .remote-avatar,
 .visitor-mode .self-avatar {
-  background-image: url("1%20Pictures/4.jpg");
+  background-image: url("1%20Pictures/5.jpg");
 }
 
 .host-mode .self-avatar,
 .visitor-mode .remote-avatar {
-  background-image: url("1%20Pictures/3.png");
+  background-image: url("1%20Pictures/6.png");
 }
 
 /* Messages */
