@@ -105,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const sendBtn = document.getElementById('send-btn');
   const waitingBtn = document.getElementById('waiting-btn');
   const ringBtn = document.getElementById('ring-btn');
+  const stopRingBtn = document.getElementById('stop-ring-btn');
   const enableSoundBtn = document.getElementById('enable-sound-btn');
   const chatHistory = document.getElementById('chat-history');
 
@@ -209,6 +210,8 @@ document.addEventListener('DOMContentLoaded', () => {
       window.clearTimeout(activeRingTimeout);
       activeRingTimeout = null;
     }
+
+    stopRingBtn.style.display = 'none';
   }
 
   function stopRingBecauseUserResponded() {
@@ -226,6 +229,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const played = playTone(frequencies, toneDuration, gap);
 
     if (repeatForMs <= intervalMs) return played;
+
+    stopRingBtn.style.display = 'inline-block';
 
     activeRingInterval = window.setInterval(() => {
       playTone(frequencies, toneDuration, gap);
@@ -440,6 +445,8 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Could not send the ring.');
     });
   });
+
+  stopRingBtn.addEventListener('click', stopRingBecauseUserResponded);
 
   enableSoundBtn.addEventListener('click', () => {
     enableSound().catch(() => {
