@@ -164,6 +164,8 @@ async function handlePostEvent(roomId, req, res) {
     const sender = data.sender === 'host' ? 'host' : 'visitor';
     const allowedTypes = new Set(['message', 'presence', 'ring']);
     const type = allowedTypes.has(data.type) ? data.type : 'message';
+    const allowedRingVariants = new Set(['doorbell', 'waiting']);
+    const variant = allowedRingVariants.has(data.variant) ? data.variant : 'doorbell';
     const text = typeof data.text === 'string' ? data.text.trim().slice(0, 1000) : '';
 
     if (type === 'message' && !text) {
@@ -175,6 +177,7 @@ async function handlePostEvent(roomId, req, res) {
       id: crypto.randomUUID(),
       sender,
       type,
+      variant: type === 'ring' ? variant : undefined,
       text,
       sentAt: new Date().toISOString()
     });

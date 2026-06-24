@@ -58,9 +58,11 @@ function storeMessage(roomId, message) {
 
 function renderMessage(chatHistory, message) {
   if (message.type === 'ring') {
-    const text = message.sender === 'host'
-      ? 'Host pinged the visitor'
-      : 'Visitor rang the doorbell';
+    const text = message.variant === 'waiting'
+      ? 'Visitor is waiting at the door'
+      : message.sender === 'host'
+        ? 'Host pinged the visitor'
+        : 'Visitor rang the doorbell';
     appendMessage(chatHistory, text, 'ring-message');
     return;
   }
@@ -111,6 +113,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let connected = false;
   let audioContext = null;
   let ringCooldownUntil = 0;
+  let activeRingInterval = null;
+  let activeRingTimeout = null;
   const seenMessageIds = new Set();
 
   function setVisitorControlsEnabled(enabled) {
@@ -183,6 +187,41 @@ document.addEventListener('DOMContentLoaded', () => {
     return true;
   }
 
+  function stopRingSequence() {
+    if (activeRingInterval) {
+      window.clearInterval(activeRingInterval);
+      activeRingInterval = null;
+    }
+
+    if (activeRingTimeout) {
+      window.clearTimeout(activeRingTimeout);
+      activeRingTimeout = null;
+    }
+  }
+
+  function playRingSequence(frequencies, options = {}) {
+    const repeatForMs = options.repeatForMs || 0;
+    const intervalMs = options.intervalMs || 3000;
+    const toneDuration = options.toneDuration || 0.16;
+    const gap = options.gap || 0.08;
+
+    stopRingSequence();
+    const played = playTone(frequencies, toneDuration, gap);
+
+    if (repeatForMs <= intervalMs) return played;
+
+    activeRingInterval = window.setInterval(() => {
+      playTone(frequencies, toneDuration, gap);
+      flashRingAlert();
+    }, intervalMs);
+
+    activeRingTimeout = window.setTimeout(() => {
+      stopRingSequence();
+    }, repeatForMs);
+
+    return played;
+  }
+
   function flashRingAlert() {
     document.body.classList.remove('ring-alert');
     void document.body.offsetWidth;
@@ -194,12 +233,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function handleRing(data, fromStoredHistory = false) {
     const isOwnRing = data.sender === (isVisitor ? 'visitor' : 'host');
+    const isWaitingRing = data.variant === 'waiting';
     const incomingText = data.sender === 'host'
       ? 'Host is calling you'
-      : 'Visitor is ringing';
+      : isWaitingRing
+        ? 'Visitor is waiting at the door'
+        : 'Visitor is ringing';
     const sentText = data.sender === 'host'
       ? 'Ping sent to visitor'
-      : 'Ring sent to host';
+      : isWaitingRing
+        ? 'Waiting notice sent to host'
+        : 'Ring sent to host';
 
     statusEl.textContent = isOwnRing ? sentText : incomingText;
     renderMessage(chatHistory, data);
@@ -207,9 +251,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isOwnRing || fromStoredHistory) return;
 
     flashRingAlert();
-    const played = data.sender === 'host'
-      ? playTone([784, 988], 0.14, 0.07)
-      : playTone([659, 523, 659, 523], 0.16, 0.08);
+    const played = isWaitingRing
+      ? playRingSequence([880, 660], { repeatForMs: 0, toneDuration: 0.12, gap: 0.05 })
+      : data.sender === 'host'
+        ? playRingSequence([784, 988], { repeatForMs: 20_000, intervalMs: 2500, toneDuration: 0.14, gap: 0.07 })
+        : playRingSequence([659, 523, 659, 523], { repeatForMs: 20_000, intervalMs: 3000, toneDuration: 0.16, gap: 0.08 });
 
     if (!played) {
       enableSoundBtn.textContent = 'Enable Sound for Ring';
@@ -287,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  async function sendRing() {
+  async function sendRing(variant = 'doorbell') {
     const now = Date.now();
     if (now < ringCooldownUntil) return;
 
@@ -296,18 +342,24 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    ringCooldownUntil = now + 3000;
+    const cooldownMs = variant === 'waiting' ? 3000 : 20_000;
+    ringCooldownUntil = now + cooldownMs;
     ringBtn.disabled = true;
+    waitingBtn.disabled = true;
 
     try {
       await sendRoomEvent(roomId, {
         sender: isVisitor ? 'visitor' : 'host',
-        type: 'ring'
+        type: 'ring',
+        variant
       });
     } finally {
       window.setTimeout(() => {
-        if (connected) ringBtn.disabled = false;
-      }, 3000);
+        if (connected) {
+          ringBtn.disabled = false;
+          waitingBtn.disabled = false;
+        }
+      }, cooldownMs);
     }
   }
 
@@ -358,7 +410,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   waitingBtn.addEventListener('click', () => {
-    sendMessage("I'm waiting at the door!").catch(() => {
+    Promise.all([
+      sendMessage("I'm waiting at the door!"),
+      sendRing('waiting')
+    ]).catch(() => {
       alert('Could not send the waiting message.');
     });
   });
