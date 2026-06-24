@@ -26,16 +26,23 @@
   <div id="visitor-section" style="display: none;">
     <p id="visitor-greeting">You're at the door! Send a message or photo.</p>
 
-    <input id="message-input" type="text" placeholder="Type message..." />
     <button id="ring-btn">Ring Host</button>
-    <button id="send-btn">Send Message</button>
     <button id="waiting-btn">I'm Waiting</button>
     <button id="stop-ring-btn" style="display: none;">Stop Ringing</button>
 
     <div id="chat-stage">
       <div class="chat-avatar remote-avatar" role="img" aria-label="Other participant display picture"></div>
+      <div class="avatar-label remote-label"></div>
+
       <div id="chat-history"></div>
+
       <div class="chat-avatar self-avatar" role="img" aria-label="Your display picture"></div>
+      <div class="avatar-label self-label"></div>
+    </div>
+
+    <div id="chat-composer">
+      <input id="message-input" type="text" placeholder="Type message..." />
+      <button id="send-btn">Send Message</button>
     </div>
 
     <p id="visitor-status">Connecting...</p>

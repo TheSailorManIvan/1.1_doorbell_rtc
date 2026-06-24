@@ -96,6 +96,25 @@ input[readonly] {
   font-size: 16px;
 }
 
+/* Chat input composer - placed below the chat box */
+#chat-composer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 20px 0 12px;
+}
+
+#chat-composer input {
+  flex: 1;
+  margin: 0;
+}
+
+#chat-composer button {
+  margin: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Share link */
 #link-display {
   font-family: monospace;
@@ -133,7 +152,7 @@ input[readonly] {
 
 /* Message container */
 #chat-stage {
-  margin: 72px 0 64px;
+  margin: 108px 0 115px;
   position: relative;
 }
 
@@ -141,7 +160,7 @@ input[readonly] {
   background: white;
   border: 1px solid #ddd;
   border-radius: 8px;
-  padding: 38px 18px 42px;
+  padding: 26px 18px 30px;
   min-height: 150px;
   max-height: 350px;
   overflow-y: auto;
@@ -163,13 +182,13 @@ input[readonly] {
 }
 
 .remote-avatar {
-  top: -62px;
+  top: -95px;
   left: 18px;
 }
 
 .self-avatar {
   right: 18px;
-  bottom: -62px;
+  bottom: -95px;
 }
 
 .host-mode .remote-avatar,
@@ -180,6 +199,49 @@ input[readonly] {
 .host-mode .self-avatar,
 .visitor-mode .remote-avatar {
   background-image: url("1%20Pictures/6.jpg");
+}
+
+/* Avatar role labels (placed to the sides) */
+.avatar-label {
+  position: absolute;
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a73e8;
+  letter-spacing: 0.4px;
+  pointer-events: none;
+  z-index: 3;
+  white-space: nowrap;
+  background: white;
+  padding: 3px 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e0e0e0;
+}
+
+/* Position labels beside the avatars */
+.remote-label {
+  top: -68px;
+  left: 118px;
+}
+
+.self-label {
+  bottom: -68px;
+  right: 118px;
+}
+
+/* Assign correct role labels */
+.host-mode .remote-label::after {
+  content: "Visitor";
+}
+.host-mode .self-label::after {
+  content: "Host";
+}
+
+.visitor-mode .remote-label::after {
+  content: "Host";
+}
+.visitor-mode .self-label::after {
+  content: "Visitor";
 }
 
 /* Messages */
@@ -242,7 +304,7 @@ body.ring-alert #visitor-section {
 #visitor-status {
   font-weight: bold;
   color: #1a73e8;
-  margin: 12px 0;
+  margin: 20px 0;
   text-align: center;
 }
 
@@ -254,6 +316,14 @@ body.ring-alert #visitor-section {
   }
 
   button {
+    width: 100%;
+  }
+
+  #chat-composer {
+    flex-direction: column;
+  }
+
+  #chat-composer button {
     width: 100%;
   }
 
