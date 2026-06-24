@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Doorbell MVP</title>
+
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- QR Code library -->
+  <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs@1.0.0/qrcode.min.js"></script>
+</head>
+
+<body>
+  <h1>Doorbell MVP</h1>
+
+  <div id="homeowner-section">
+    <button id="generate-btn">Generate Doorbell Link / QR</button>
+    <p id="link-display">Link will appear here</p>
+    <div id="qrcode"></div>
+
+    <p id="homeowner-status">Waiting for visitor...</p>
+  </div>
+
+  <div id="visitor-section" style="display: none;">
+    <p id="visitor-greeting">You're at the door! Send a message or photo.</p>
+
+    <input id="message-input" type="text" placeholder="Type message..." />
+    <button id="send-btn">Send Message</button>
+    <button id="waiting-btn">I'm Waiting</button>
+
+    <div id="chat-history"></div>
+
+    <p id="visitor-status">Connecting...</p>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
