@@ -15,11 +15,46 @@ body {
   margin: auto;
 }
 
+/* App Header */
+.app-header {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.circular-board {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin: 0 auto 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  border: 5px solid #1a73e8;
+  background-color: white;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.circular-board img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  transform: scale(0.9);
+  background-color: white;
+}
+
+.circular-board:hover,
+.circular-board:active {
+  transform: scale(1.08);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+}
+
 /* Title */
 h1 {
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
   color: #1a73e8;
+  font-size: 36px;
 }
 
 /* Panels */
@@ -224,12 +259,12 @@ input[readonly] {
 
 .host-mode .remote-avatar,
 .visitor-mode .self-avatar {
-  background-image: url("1%20Pictures/5.jpg");
+  background-image: url("1%20Pictures/6.jpg");
 }
 
 .host-mode .self-avatar,
 .visitor-mode .remote-avatar {
-  background-image: url("1%20Pictures/7.jpg");
+  background-image: url("1%20Pictures/5.jpg");
 }
 
 /* Avatar role labels (placed to the sides) */
@@ -356,6 +391,20 @@ body.ring-alert #visitor-section {
 
   #chat-composer button {
     width: 100%;
+  }
+
+  .circular-board {
+    width: 120px;
+    height: 120px;
+    background-color: white;
+  }
+
+  .circular-board img {
+    background-color: white;
+  }
+
+  h1 {
+    font-size: 28px;
   }
 
 }

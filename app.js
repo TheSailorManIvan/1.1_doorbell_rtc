@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const seenMessageIds = new Set();
   let currentPhotos = { host: [], visitor: [] }; // arrays of {id, uploadedAt}
 
-  startBtn.textContent = isVisitor ? 'Join Doorbell' : 'Start Doorbell';
+  startBtn.textContent = isVisitor ? 'Join rooBell' : 'Start rooBell';
   document.body.classList.add(isVisitor ? 'visitor-mode' : 'host-mode');
 
   function setVisitorControlsEnabled(enabled) {

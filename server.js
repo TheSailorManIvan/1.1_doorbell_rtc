@@ -384,7 +384,7 @@ function getLanAddresses() {
 }
 
 server.listen(PORT, HOST, () => {
-  console.log(`Doorbell RTC running at http://${HOST}:${PORT}`);
+  console.log(`rooBell running at http://${HOST}:${PORT}`);
   if (HOST === '127.0.0.1') {
     console.log('For phones or other computers on Wi-Fi, run: HOST=0.0.0.0 node server.js');
   } else {
