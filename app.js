@@ -120,6 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let ringCooldownUntil = 0;
   let activeRingInterval = null;
   let activeRingTimeout = null;
+  const activeOscillators = new Set();
   let soundWasEnabled = false;
   const seenMessageIds = new Set();
 
@@ -199,6 +200,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       oscillator.connect(gain);
       gain.connect(audioContext.destination);
+      activeOscillators.add(oscillator);
+      oscillator.addEventListener('ended', () => {
+        activeOscillators.delete(oscillator);
+      });
       oscillator.start(start);
       oscillator.stop(end + 0.02);
     });
@@ -217,12 +222,28 @@ document.addEventListener('DOMContentLoaded', () => {
       activeRingTimeout = null;
     }
 
+    for (const oscillator of activeOscillators) {
+      try {
+        oscillator.stop();
+      } catch {
+        // The oscillator may already have stopped naturally.
+      }
+    }
+
+    activeOscillators.clear();
+
     stopRingBtn.style.display = 'none';
   }
 
   function stopRingBecauseUserResponded() {
     stopRingSequence();
     document.body.classList.remove('ring-alert');
+  }
+
+  function handleStopRingControl(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    stopRingBecauseUserResponded();
   }
 
   function playRingSequence(frequencies, options = {}) {
@@ -449,7 +470,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  stopRingBtn.addEventListener('click', stopRingBecauseUserResponded);
+  stopRingBtn.addEventListener('pointerdown', handleStopRingControl);
+  stopRingBtn.addEventListener('touchstart', handleStopRingControl);
+  stopRingBtn.addEventListener('click', handleStopRingControl);
 
   enableSoundBtn.addEventListener('click', () => {
     enableSound().catch(() => {
