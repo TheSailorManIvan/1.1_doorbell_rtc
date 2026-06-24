@@ -40,6 +40,31 @@ function appendMessage(chatHistory, text, className = '') {
   chatHistory.scrollTop = chatHistory.scrollHeight;
 }
 
+function getStoredMessages(roomId) {
+  try {
+    return JSON.parse(localStorage.getItem(`doorbellMessages:${roomId}`) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function storeMessage(roomId, message) {
+  const messages = getStoredMessages(roomId);
+  if (messages.some((storedMessage) => storedMessage.id === message.id)) return;
+
+  messages.push(message);
+  localStorage.setItem(`doorbellMessages:${roomId}`, JSON.stringify(messages.slice(-50)));
+}
+
+function renderMessage(chatHistory, message) {
+  const label = message.sender === 'host' ? 'Host' : 'Visitor';
+  appendMessage(
+    chatHistory,
+    `${label}: ${message.text}`,
+    message.sender === 'host' ? 'host-message' : 'visitor-message'
+  );
+}
+
 async function sendRoomEvent(roomId, payload) {
   const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/events`, {
     method: 'POST',
@@ -74,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusEl = isVisitor ? visitorStatusEl : homeownerStatusEl;
   let eventSource = null;
   let connected = false;
+  const seenMessageIds = new Set();
 
   function setVisitorControlsEnabled(enabled) {
     sendBtn.disabled = !enabled;
@@ -87,13 +113,21 @@ document.addEventListener('DOMContentLoaded', () => {
       setVisitorControlsEnabled(isConnected);
       statusEl.textContent = isConnected
         ? 'Connected - send a message when you are ready'
-        : 'Connecting...';
+        : 'Connecting or waking server...';
       return;
     }
 
     statusEl.textContent = isConnected
       ? 'Ready - share the link or QR code'
-      : 'Connecting room...';
+      : 'Connecting room or waking server...';
+  }
+
+  function showStoredMessages() {
+    for (const message of getStoredMessages(roomId)) {
+      if (seenMessageIds.has(message.id)) continue;
+      seenMessageIds.add(message.id);
+      renderMessage(chatHistory, message);
+    }
   }
 
   function connectToRoom() {
@@ -124,9 +158,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (data.type !== 'message') return;
+      if (seenMessageIds.has(data.id)) return;
 
-      const label = data.sender === 'host' ? 'Host' : 'Visitor';
-      appendMessage(chatHistory, `${label}: ${data.text}`, data.sender === 'host' ? 'host-message' : 'visitor-message');
+      seenMessageIds.add(data.id);
+      storeMessage(roomId, data);
+      renderMessage(chatHistory, data);
     });
 
     eventSource.addEventListener('error', () => {
@@ -202,5 +238,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (event.key === 'Enter') sendBtn.click();
   });
 
+  showStoredMessages();
   connectToRoom();
 });

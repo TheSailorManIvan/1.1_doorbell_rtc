@@ -8,6 +8,7 @@ const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || (process.env.RENDER ? '0.0.0.0' : '127.0.0.1');
 const PUBLIC_DIR = __dirname;
 const rooms = new Map();
+const MAX_ROOM_HISTORY = 50;
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -29,16 +30,26 @@ function sendJson(res, statusCode, body) {
 }
 
 function getRoomClients(roomId) {
-  if (!rooms.has(roomId)) rooms.set(roomId, new Set());
+  if (!rooms.has(roomId)) {
+    rooms.set(roomId, {
+      clients: new Set(),
+      history: []
+    });
+  }
   return rooms.get(roomId);
 }
 
 function broadcast(roomId, data) {
-  const clients = rooms.get(roomId);
-  if (!clients) return;
+  const room = rooms.get(roomId);
+  if (!room) return;
+
+  if (data.type === 'message') {
+    room.history.push(data);
+    room.history = room.history.slice(-MAX_ROOM_HISTORY);
+  }
 
   const message = `data: ${JSON.stringify(data)}\n\n`;
-  for (const client of clients) {
+  for (const client of room.clients) {
     client.write(message);
   }
 }
@@ -75,14 +86,22 @@ function handleEventStream(roomId, req, res) {
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no'
   });
-  res.write('retry: 1000\n\n');
+  res.write('retry: 3000\n\n');
 
-  const clients = getRoomClients(roomId);
-  clients.add(res);
+  const room = getRoomClients(roomId);
+  room.clients.add(res);
+
+  for (const message of room.history) {
+    res.write(`data: ${JSON.stringify(message)}\n\n`);
+  }
+
+  const heartbeat = setInterval(() => {
+    res.write(': heartbeat\n\n');
+  }, 25_000);
 
   req.on('close', () => {
-    clients.delete(res);
-    if (clients.size === 0) rooms.delete(roomId);
+    clearInterval(heartbeat);
+    room.clients.delete(res);
   });
 }
 
@@ -175,7 +194,7 @@ function getLanAddresses() {
 }
 
 server.listen(PORT, HOST, () => {
-  console.log(`Doorbell MVP running at http://${HOST}:${PORT}`);
+  console.log(`Doorbell RTC running at http://${HOST}:${PORT}`);
   if (HOST === '127.0.0.1') {
     console.log('For phones or other computers on Wi-Fi, run: HOST=0.0.0.0 node server.js');
   } else {
