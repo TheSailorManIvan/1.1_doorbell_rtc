@@ -11,7 +11,11 @@
 <body>
   <h1>Doorbell RTC</h1>
 
-  <div id="homeowner-section">
+  <div id="start-section">
+    <button id="start-btn">Start Doorbell</button>
+  </div>
+
+  <div id="homeowner-section" style="display: none;">
     <button id="generate-btn">Generate Doorbell Link / QR</button>
     <p id="link-display">Link will appear here</p>
     <div id="qrcode"></div>
@@ -33,7 +37,7 @@
     <p id="visitor-status">Connecting...</p>
   </div>
 
-  <div id="sound-section">
+  <div id="sound-section" style="display: none;">
     <button id="enable-sound-btn">Enable Sound</button>
   </div>
 

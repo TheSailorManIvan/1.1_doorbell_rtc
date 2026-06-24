@@ -95,10 +95,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   localStorage.setItem('doorbellRoomId', roomId);
 
+  const startSection = document.getElementById('start-section');
+  const startBtn = document.getElementById('start-btn');
   const generateBtn = document.getElementById('generate-btn');
   const linkDisplay = document.getElementById('link-display');
   const homeownerSection = document.getElementById('homeowner-section');
   const visitorSection = document.getElementById('visitor-section');
+  const soundSection = document.getElementById('sound-section');
   const homeownerStatusEl = document.getElementById('homeowner-status');
   const visitorStatusEl = document.getElementById('visitor-status');
   const messageInput = document.getElementById('message-input');
@@ -118,6 +121,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeRingTimeout = null;
   let soundWasEnabled = false;
   const seenMessageIds = new Set();
+
+  startBtn.textContent = isVisitor ? 'Join Doorbell' : 'Start Doorbell';
 
   function setVisitorControlsEnabled(enabled) {
     sendBtn.disabled = !enabled;
@@ -386,11 +391,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (isVisitor) {
-    homeownerSection.style.display = 'none';
-    visitorSection.style.display = 'block';
     setVisitorControlsEnabled(false);
   } else {
-    visitorSection.style.display = 'block';
     document.getElementById('visitor-greeting').textContent = 'Host reply';
     ringBtn.textContent = 'Ping Visitor';
     waitingBtn.style.display = 'none';
@@ -454,9 +456,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  document.addEventListener('pointerdown', enableSoundQuietly, { once: true });
-  document.addEventListener('keydown', enableSoundQuietly, { once: true });
-
   messageInput.addEventListener('input', stopRingBecauseUserResponded);
 
   messageInput.addEventListener('keydown', (event) => {
@@ -464,6 +463,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (event.key === 'Enter') sendBtn.click();
   });
 
-  showStoredMessages();
-  connectToRoom();
+  startBtn.addEventListener('click', () => {
+    enableSoundQuietly();
+    startSection.style.display = 'none';
+    soundSection.style.display = 'block';
+
+    if (isVisitor) {
+      homeownerSection.style.display = 'none';
+      visitorSection.style.display = 'block';
+    } else {
+      homeownerSection.style.display = 'block';
+      visitorSection.style.display = 'block';
+    }
+
+    showStoredMessages();
+    connectToRoom();
+  });
 });
