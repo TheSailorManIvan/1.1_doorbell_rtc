@@ -1,0 +1,152 @@
+/* Reset for consistent layout */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Page layout */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: #f0f2f5;
+  color: #333;
+  padding: 20px;
+  max-width: 800px;
+  margin: auto;
+}
+
+/* Title */
+h1 {
+  text-align: center;
+  margin-bottom: 30px;
+  color: #1a73e8;
+}
+
+/* Panels */
+#homeowner-section,
+#visitor-section {
+  background: white;
+  padding: 25px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
+}
+
+/* Buttons */
+button {
+  background-color: #1a73e8;
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  margin: 8px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 0.2s ease;
+}
+
+button:hover {
+  background-color: #1557b0;
+}
+
+button:active {
+  background-color: #0f4a99;
+}
+
+button:disabled {
+  background-color: #9aa7b8;
+  cursor: not-allowed;
+}
+
+/* Inputs */
+input[type="text"],
+input[type="file"],
+input[readonly] {
+  width: 100%;
+  padding: 12px;
+  margin: 10px 0;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 16px;
+}
+
+/* Share link */
+#link-display {
+  font-family: monospace;
+  word-break: break-all;
+  background: #fafafa;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  margin: 12px 0;
+  padding: 12px;
+}
+
+/* QR section */
+#qrcode {
+  text-align: center;
+  margin: 20px 0;
+}
+
+#qrcode img,
+#qrcode canvas {
+  margin: auto;
+}
+
+/* Message container */
+#chat-history {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  min-height: 150px;
+  max-height: 350px;
+  overflow-y: auto;
+  margin-top: 15px;
+}
+
+/* Messages */
+#chat-history div {
+  background: #e8f0fe;
+  margin: 6px 0;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+#chat-history .host-message {
+  background: #e8f0fe;
+}
+
+#chat-history .visitor-message {
+  background: #e7f6ed;
+}
+
+/* Images sent */
+#chat-history img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 6px 0;
+}
+
+/* Status text */
+#homeowner-status,
+#visitor-status {
+  font-weight: bold;
+  color: #1a73e8;
+  margin: 12px 0;
+  text-align: center;
+}
+
+/* Mobile responsive */
+@media (max-width: 600px) {
+
+  body {
+    padding: 15px;
+  }
+
+  button {
+    width: 100%;
+  }
+
+}
+
+
