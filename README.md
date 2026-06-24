@@ -1,15 +1,15 @@
 
-#intro
+# Intro
 
 A light weight rtc generator, plays a doorbell chime so host and vistors can find each other.
 
 
-##Link 
+## Link 
 
 https://one-1-doorbell-rtc.onrender.com  
 
 
-##Goals
+## Goals
 
 1 get working it on a cheap server after I get it working offline through just me wifi
 
@@ -28,7 +28,7 @@ https://one-1-doorbell-rtc.onrender.com
 7.2 code review on existing light weight rtcs. Possible future options. Possibly explore the power of paid server access if it's worth it.
 
 
-##Learning goals
+## Learning goals
 
 1 use a variety of helpful javascript stacks, this one makes use of peerJs
 
