@@ -62,7 +62,9 @@ function getRoomClients(roomId) {
   if (!rooms.has(roomId)) {
     rooms.set(roomId, {
       clients: new Set(),
-      history: []
+      history: [],
+      photos: { host: null, visitor: null },
+      photoTimeouts: { host: null, visitor: null }
     });
   }
   return rooms.get(roomId);
@@ -81,6 +83,51 @@ function broadcast(roomId, data) {
   for (const client of room.clients) {
     client.write(message);
   }
+}
+
+function setRoomPhoto(roomId, sender, dataUrl) {
+  const room = rooms.get(roomId);
+  if (!room) return;
+
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl);
+  if (!match) return;
+
+  const mime = match[1];
+  const base64 = dataUrl;
+
+  // Clear previous timeout
+  if (room.photoTimeouts[sender]) {
+    clearTimeout(room.photoTimeouts[sender]);
+  }
+
+  const uploadedAt = new Date().toISOString();
+  room.photos[sender] = { data: base64, mime, uploadedAt };
+
+  broadcast(roomId, { type: 'photo', sender, uploadedAt });
+
+  // Auto-expire after 3 minutes
+  room.photoTimeouts[sender] = setTimeout(() => {
+    room.photos[sender] = null;
+    room.photoTimeouts[sender] = null;
+    broadcast(roomId, { type: 'photo-expired', sender });
+  }, 3 * 60 * 1000);
+}
+
+function getRoomPhoto(roomId, sender) {
+  const room = rooms.get(roomId);
+  if (!room || !room.photos[sender]) return null;
+
+  const photo = room.photos[sender];
+  const age = Date.now() - new Date(photo.uploadedAt).getTime();
+  if (age > 3 * 60 * 1000) {
+    room.photos[sender] = null;
+    if (room.photoTimeouts[sender]) {
+      clearTimeout(room.photoTimeouts[sender]);
+      room.photoTimeouts[sender] = null;
+    }
+    return null;
+  }
+  return photo;
 }
 
 function serveStatic(req, res) {
@@ -130,6 +177,14 @@ function handleEventStream(roomId, req, res) {
 
   for (const message of room.history) {
     res.write(`data: ${JSON.stringify(message)}\n\n`);
+  }
+
+  // Send current photos if available
+  if (room.photos.host) {
+    res.write(`data: ${JSON.stringify({ type: 'photo', sender: 'host', uploadedAt: room.photos.host.uploadedAt })}\n\n`);
+  }
+  if (room.photos.visitor) {
+    res.write(`data: ${JSON.stringify({ type: 'photo', sender: 'visitor', uploadedAt: room.photos.visitor.uploadedAt })}\n\n`);
   }
 
   const heartbeat = setInterval(() => {
@@ -196,6 +251,37 @@ async function handlePostEvent(roomId, req, res) {
   }
 }
 
+async function handlePhotoUpload(roomId, req, res) {
+  try {
+    const data = await readJsonBody(req);
+    const sender = data.sender === 'host' ? 'host' : 'visitor';
+
+    if (!data.image || typeof data.image !== 'string') {
+      sendJson(res, 400, { error: 'image (data URL) is required' });
+      return;
+    }
+
+    // Basic validation: must be image data URL
+    if (!/^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(data.image)) {
+      sendJson(res, 400, { error: 'Invalid image format. Use data URL.' });
+      return;
+    }
+
+    // Optional size check (base64 ~ 1.37x actual size, limit ~ 2MB image)
+    const base64Length = data.image.length - data.image.indexOf(',') - 1;
+    const approxBytes = Math.floor(base64Length * 0.75);
+    if (approxBytes > 2 * 1024 * 1024) {
+      sendJson(res, 400, { error: 'Photo too large (max ~2MB)' });
+      return;
+    }
+
+    setRoomPhoto(roomId, sender, data.image);
+    sendJson(res, 200, { ok: true });
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+  }
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const eventMatch = url.pathname.match(/^\/api\/rooms\/([^/]+)\/events$/);
@@ -207,6 +293,35 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === '/api/qr.svg') {
     sendQrCode(res, url.searchParams.get('text'));
+    return;
+  }
+
+  // Photo upload
+  const photoMatch = url.pathname.match(/^\/api\/rooms\/([^/]+)\/photo$/);
+  if (photoMatch && req.method === 'POST') {
+    const roomId = decodeURIComponent(photoMatch[1]);
+    handlePhotoUpload(roomId, req, res);
+    return;
+  }
+
+  // Photo retrieval
+  if (photoMatch && req.method === 'GET') {
+    const roomId = decodeURIComponent(photoMatch[1]);
+    const sender = url.searchParams.get('sender') || 'visitor';
+    const photo = getRoomPhoto(roomId, sender);
+    if (!photo) {
+      sendJson(res, 404, { error: 'No current photo or expired' });
+      return;
+    }
+    // Serve the image
+    const base64Data = photo.data.split(',')[1];
+    const buffer = Buffer.from(base64Data, 'base64');
+    res.writeHead(200, {
+      'Content-Type': photo.mime,
+      'Cache-Control': 'no-store, max-age=0',
+      'Content-Length': buffer.length
+    });
+    res.end(buffer);
     return;
   }
 

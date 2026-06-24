@@ -110,6 +110,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const ringBtn = document.getElementById('ring-btn');
   const stopRingBtn = document.getElementById('stop-ring-btn');
   const enableSoundBtn = document.getElementById('enable-sound-btn');
+  const uploadPhotoBtn = document.getElementById('upload-photo-btn');
+  const photoInput = document.getElementById('photo-input');
+  const viewPhotoBtn = document.getElementById('view-photo-btn');
+  const photoStatus = document.getElementById('photo-status');
   const chatHistory = document.getElementById('chat-history');
 
   const statusEl = isVisitor ? visitorStatusEl : homeownerStatusEl;
@@ -122,6 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const activeOscillators = new Set();
   let soundWasEnabled = false;
   const seenMessageIds = new Set();
+  let currentPhotos = { host: null, visitor: null }; // { uploadedAt } or null
 
   startBtn.textContent = isVisitor ? 'Join Doorbell' : 'Start Doorbell';
   document.body.classList.add(isVisitor ? 'visitor-mode' : 'host-mode');
@@ -146,12 +151,34 @@ document.addEventListener('DOMContentLoaded', () => {
       statusEl.textContent = isConnected
         ? 'Connected - send a message when you are ready'
         : 'Connecting or waking server...';
-      return;
+    } else {
+      statusEl.textContent = isConnected
+        ? 'Ready - share the link or QR code'
+        : 'Connecting room or waking server...';
     }
 
-    statusEl.textContent = isConnected
-      ? 'Ready - share the link or QR code'
-      : 'Connecting room or waking server...';
+    updatePhotoUI();
+  }
+
+  function updatePhotoUI() {
+    const mySide = isVisitor ? 'visitor' : 'host';
+    const otherSide = isVisitor ? 'host' : 'visitor';
+
+    // Upload is always available (once connected)
+    uploadPhotoBtn.disabled = !connected;
+    uploadPhotoBtn.textContent = 'Upload photo of where I am';
+
+    // View button
+    const otherPhoto = currentPhotos[otherSide];
+    if (otherPhoto) {
+      viewPhotoBtn.style.display = 'inline-block';
+      viewPhotoBtn.disabled = !connected;
+      viewPhotoBtn.textContent = 'View their photo';
+      photoStatus.textContent = 'Photo available';
+    } else {
+      viewPhotoBtn.style.display = 'none';
+      photoStatus.textContent = '';
+    }
   }
 
   async function enableSound() {
@@ -238,6 +265,42 @@ document.addEventListener('DOMContentLoaded', () => {
   function stopRingBecauseUserResponded() {
     stopRingSequence();
     document.body.classList.remove('ring-alert');
+  }
+
+  async function uploadCurrentPhoto(file) {
+    if (!connected || !file) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      try {
+        uploadPhotoBtn.disabled = true;
+        uploadPhotoBtn.textContent = 'Uploading...';
+
+        const mySide = isVisitor ? 'visitor' : 'host';
+        const res = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/photo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sender: mySide, image: dataUrl })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Upload failed');
+        }
+
+        photoStatus.textContent = 'Photo uploaded (expires in 3 min)';
+        // The 'photo' event will come via SSE and update the UI
+      } catch (err) {
+        alert('Photo upload failed: ' + err.message);
+        photoStatus.textContent = '';
+      } finally {
+        uploadPhotoBtn.disabled = !connected;
+        uploadPhotoBtn.textContent = 'Upload photo of where I am';
+        photoInput.value = '';
+      }
+    };
+    reader.readAsDataURL(file);
   }
 
   function handleStopRingControl(event) {
@@ -351,16 +414,37 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      if (data.type !== 'message' && data.type !== 'ring') return;
-      if (seenMessageIds.has(data.id)) return;
+      if (data.type !== 'message' && data.type !== 'ring' && data.type !== 'photo' && data.type !== 'photo-expired') return;
 
-      seenMessageIds.add(data.id);
-      storeMessage(roomId, data);
+      if (data.type === 'message' || data.type === 'ring') {
+        if (seenMessageIds.has(data.id)) return;
+        seenMessageIds.add(data.id);
+        storeMessage(roomId, data);
+      }
 
       if (data.type === 'ring') {
         handleRing(data);
-      } else {
+      } else if (data.type === 'message') {
         renderMessage(chatHistory, data);
+      } else if (data.type === 'photo') {
+        currentPhotos[data.sender] = { uploadedAt: data.uploadedAt };
+        updatePhotoUI();
+
+        const mySide = isVisitor ? 'visitor' : 'host';
+        if (data.sender === mySide) {
+          photoStatus.textContent = 'Your photo uploaded (expires in ~3 min)';
+        } else {
+          photoStatus.textContent = 'New photo available';
+        }
+      } else if (data.type === 'photo-expired') {
+        currentPhotos[data.sender] = null;
+        updatePhotoUI();
+        const mySide = isVisitor ? 'visitor' : 'host';
+        if (data.sender === mySide) {
+          photoStatus.textContent = 'Your photo expired';
+        } else {
+          photoStatus.textContent = 'Photo expired';
+        }
       }
     });
 
@@ -409,6 +493,53 @@ document.addEventListener('DOMContentLoaded', () => {
           waitingBtn.disabled = false;
         }
       }, cooldownMs);
+    }
+  }
+
+  async function viewOtherPhoto() {
+    if (!connected) return;
+
+    const otherSide = isVisitor ? 'host' : 'visitor';
+    if (!currentPhotos[otherSide]) {
+      alert('No photo available');
+      return;
+    }
+
+    try {
+      viewPhotoBtn.disabled = true;
+      viewPhotoBtn.textContent = 'Loading...';
+
+      const res = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/photo?sender=${otherSide}`);
+      if (!res.ok) throw new Error('Photo not available or expired');
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+
+      // Simple photo viewer
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999;';
+      modal.innerHTML = `
+        <div style="background:white;padding:12px;border-radius:8px;max-width:90vw;max-height:90vh;">
+          <img src="${url}" style="max-width:80vw;max-height:70vh;display:block;margin-bottom:12px;border-radius:4px;" />
+          <button style="width:100%">Close</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      const closeBtn = modal.querySelector('button');
+      const cleanup = () => {
+        URL.revokeObjectURL(url);
+        modal.remove();
+        viewPhotoBtn.disabled = !connected;
+        viewPhotoBtn.textContent = 'View their photo';
+      };
+      closeBtn.onclick = cleanup;
+      modal.onclick = (e) => { if (e.target === modal) cleanup(); };
+    } catch (err) {
+      alert('Could not load photo: ' + err.message);
+    } finally {
+      viewPhotoBtn.disabled = !connected;
+      viewPhotoBtn.textContent = 'View their photo';
     }
   }
 
@@ -480,6 +611,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Photo upload
+  uploadPhotoBtn.addEventListener('click', () => {
+    if (!connected) return;
+    photoInput.click();
+  });
+
+  photoInput.addEventListener('change', () => {
+    const file = photoInput.files[0];
+    if (file) {
+      uploadCurrentPhoto(file);
+    }
+  });
+
+  viewPhotoBtn.addEventListener('click', () => {
+    viewOtherPhoto();
+  });
+
   messageInput.addEventListener('input', stopRingBecauseUserResponded);
 
   messageInput.addEventListener('keydown', (event) => {
@@ -502,5 +650,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     showStoredMessages();
     connectToRoom();
+
+    // Make sure photo UI reflects current connection + any pre-existing photos
+    updatePhotoUI();
   });
 });
