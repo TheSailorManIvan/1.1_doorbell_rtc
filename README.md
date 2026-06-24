@@ -32,7 +32,7 @@ https://one-1-doorbell-rtc.onrender.com
 
 1 use a variety of helpful javascript stacks, this one makes use of peerJs.
 
-1.2 Get experience with JS patterns to develop and gain experience with front end
+1.2 Build experience with JS patterns to develop and get a better and reasoning with front end
 
 2 experience with differient tiers of servers with the goal of keeping this webapp cheap (Render offers a more persistent server interaction while being free)
 
