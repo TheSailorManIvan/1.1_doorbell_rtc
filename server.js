@@ -197,13 +197,13 @@ function handleEventStream(roomId, req, res) {
   });
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, maxBytes = 20000) {
   return new Promise((resolve, reject) => {
     let body = '';
 
     req.on('data', (chunk) => {
       body += chunk;
-      if (body.length > 20_000) {
+      if (body.length > maxBytes) {
         reject(new Error('Body too large'));
         req.destroy();
       }
@@ -253,7 +253,8 @@ async function handlePostEvent(roomId, req, res) {
 
 async function handlePhotoUpload(roomId, req, res) {
   try {
-    const data = await readJsonBody(req);
+    // Allow much larger body for images (base64 encoded)
+    const data = await readJsonBody(req, 5 * 1024 * 1024); // ~5MB max JSON body
     const sender = data.sender === 'host' ? 'host' : 'visitor';
 
     if (!data.image || typeof data.image !== 'string') {
@@ -267,11 +268,11 @@ async function handlePhotoUpload(roomId, req, res) {
       return;
     }
 
-    // Optional size check (base64 ~ 1.37x actual size, limit ~ 2MB image)
+    // Size check after client-side resizing (limit ~1.5MB image)
     const base64Length = data.image.length - data.image.indexOf(',') - 1;
     const approxBytes = Math.floor(base64Length * 0.75);
-    if (approxBytes > 2 * 1024 * 1024) {
-      sendJson(res, 400, { error: 'Photo too large (max ~2MB)' });
+    if (approxBytes > 1.5 * 1024 * 1024) {
+      sendJson(res, 400, { error: 'Photo too large (max ~1.5MB after compression)' });
       return;
     }
 

@@ -270,37 +270,67 @@ document.addEventListener('DOMContentLoaded', () => {
   async function uploadCurrentPhoto(file) {
     if (!connected || !file) return;
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result;
-      try {
-        uploadPhotoBtn.disabled = true;
-        uploadPhotoBtn.textContent = 'Uploading...';
+    try {
+      uploadPhotoBtn.disabled = true;
+      uploadPhotoBtn.textContent = 'Processing...';
 
-        const mySide = isVisitor ? 'visitor' : 'host';
-        const res = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/photo`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sender: mySide, image: dataUrl })
-        });
+      // Resize/compress image client-side before upload
+      const resizedDataUrl = await resizeImage(file, 1200, 0.72);
 
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || 'Upload failed');
+      uploadPhotoBtn.textContent = 'Uploading...';
+
+      const mySide = isVisitor ? 'visitor' : 'host';
+      const res = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/photo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender: mySide, image: resizedDataUrl })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Upload failed');
+      }
+
+      photoStatus.textContent = 'Photo uploaded (expires in 3 min)';
+    } catch (err) {
+      alert('Photo upload failed: ' + err.message);
+      photoStatus.textContent = '';
+    } finally {
+      uploadPhotoBtn.disabled = !connected;
+      uploadPhotoBtn.textContent = 'Upload photo of where I am';
+      photoInput.value = '';
+    }
+  }
+
+  function resizeImage(file, maxWidth, quality) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        img.src = e.target.result;
+      };
+
+      img.onload = () => {
+        let { width, height } = img;
+
+        if (width > maxWidth) {
+          height = Math.round(height * (maxWidth / width));
+          width = maxWidth;
         }
 
-        photoStatus.textContent = 'Photo uploaded (expires in 3 min)';
-        // The 'photo' event will come via SSE and update the UI
-      } catch (err) {
-        alert('Photo upload failed: ' + err.message);
-        photoStatus.textContent = '';
-      } finally {
-        uploadPhotoBtn.disabled = !connected;
-        uploadPhotoBtn.textContent = 'Upload photo of where I am';
-        photoInput.value = '';
-      }
-    };
-    reader.readAsDataURL(file);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+
+      reader.readAsDataURL(file);
+    });
   }
 
   function handleStopRingControl(event) {
