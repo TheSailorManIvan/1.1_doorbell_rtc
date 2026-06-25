@@ -392,6 +392,10 @@ body.ring-alert #visitor-section {
   text-align: center;
 }
 
+body.visitor-mode #homeowner-status {
+  display: none;
+}
+
 /* Mobile responsive */
 @media (max-width: 600px) {
 
