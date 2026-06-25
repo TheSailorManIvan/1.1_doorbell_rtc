@@ -19,14 +19,6 @@
     <button id="start-btn">Start rooBell</button>
   </div>
 
-  <div id="homeowner-section" style="display: none;">
-    <button id="generate-btn">Generate rooBell Link / QR</button>
-    <p id="link-display">Link will appear here</p>
-    <div id="qrcode"></div>
-
-    <p id="homeowner-status">Waiting for visitor...</p>
-  </div>
-
   <div id="visitor-section" style="display: none;">
     <p id="visitor-greeting">You're at the door! Send a message or photo.</p>
 
@@ -38,7 +30,9 @@
       <div class="chat-avatar remote-avatar" role="img" aria-label="Other participant display picture"></div>
       <div class="avatar-label remote-label"></div>
 
-      <div id="chat-history"></div>
+      <div id="chat-history">
+        <p id="visitor-status">Connecting...</p>
+      </div>
 
       <div class="chat-avatar self-avatar" role="img" aria-label="Your display picture"></div>
       <div class="avatar-label self-label"></div>
@@ -49,7 +43,6 @@
       <button id="send-btn">Send Message</button>
     </div>
 
-    <p id="visitor-status">Connecting...</p>
   </div>
 
   <div id="sound-section" style="display: none;">
@@ -62,6 +55,14 @@
       <div id="multi-photo-buttons" style="margin-top: 8px;"></div>
       <p id="photo-status" style="font-size: 13px; color: #666; margin-top: 4px;"></p>
     </div>
+  </div>
+
+  <div id="homeowner-section" style="display: none;">
+    <button id="generate-btn">Generate rooBell Link / QR</button>
+
+    <p id="homeowner-status">Waiting for visitor...</p>
+    <p id="link-display">Link will appear here</p>
+    <div id="qrcode"></div>
   </div>
 
   <script src="app.js"></script>

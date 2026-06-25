@@ -147,6 +147,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000);
       }
     });
+
+    // Play sound on hover for symmetry (desktop)
+    circularBoard.addEventListener('mouseenter', () => {
+      playHappyBell();
+    });
   }
 
   const statusEl = isVisitor ? visitorStatusEl : homeownerStatusEl;
@@ -291,9 +296,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function playHappyBell() {
-    if (!audioContext || audioContext.state !== 'running') return;
+    if (!audioContext) return;
+    if (audioContext.state === 'suspended') {
+      try { await audioContext.resume(); } catch {}
+    }
+    if (audioContext.state !== 'running') return;
     try {
-      const response = await fetch('sounds/3 happybell.mp3');
+      const response = await fetch('1%20sound/3%20happybell.mp3');
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
       const source = audioContext.createBufferSource();
