@@ -128,14 +128,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatHistory = document.getElementById('chat-history');
   const circularBoard = document.querySelector('.circular-board');
 
+  const HEADER_ENLARGE_DURATION_MS = 2000;  // match the ~2s duration of 3 happybell.mp3
+
   if (circularBoard) {
     let enlargeTimeout = null;
-    circularBoard.addEventListener('click', () => {
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+    circularBoard.addEventListener('click', (e) => {
       if (circularBoard.classList.contains('enlarged')) {
         circularBoard.classList.remove('enlarged');
         if (enlargeTimeout) {
           clearTimeout(enlargeTimeout);
           enlargeTimeout = null;
+        }
+        // Force reset on touch to clear any lingering hover state
+        if (isTouchDevice) {
+          circularBoard.style.transform = 'scale(1)';
+          setTimeout(() => {
+            if (!circularBoard.classList.contains('enlarged')) {
+              circularBoard.style.transform = '';
+            }
+          }, 50);
         }
       } else {
         circularBoard.classList.add('enlarged');
@@ -144,14 +157,24 @@ document.addEventListener('DOMContentLoaded', () => {
         enlargeTimeout = setTimeout(() => {
           circularBoard.classList.remove('enlarged');
           enlargeTimeout = null;
-        }, 3000);
+          if (isTouchDevice) {
+            circularBoard.style.transform = 'scale(1)';
+            setTimeout(() => {
+              if (!circularBoard.classList.contains('enlarged')) {
+                circularBoard.style.transform = '';
+              }
+            }, 50);
+          }
+        }, HEADER_ENLARGE_DURATION_MS);
       }
     });
 
-    // Play sound on hover for symmetry (desktop)
-    circularBoard.addEventListener('mouseenter', () => {
-      playHappyBell();
-    });
+    // Play sound on hover for symmetry (desktop only)
+    if (!isTouchDevice) {
+      circularBoard.addEventListener('mouseenter', () => {
+        playHappyBell();
+      });
+    }
   }
 
   const statusEl = isVisitor ? visitorStatusEl : homeownerStatusEl;

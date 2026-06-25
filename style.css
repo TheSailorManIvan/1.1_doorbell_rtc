@@ -30,8 +30,9 @@ body {
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   border: 5px solid #1a73e8;
   background-color: white;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
   cursor: pointer;
+  transform: scale(1);
 }
 
 .circular-board img {
@@ -43,10 +44,22 @@ body {
   background-color: white;
 }
 
-.circular-board:hover,
+.circular-board:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+}
+
 .circular-board.enlarged {
   transform: scale(1.08);
   box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+}
+
+/* Disable hover styles on touch devices to ensure clean revert */
+@media (hover: none) {
+  .circular-board:hover {
+    transform: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
 }
 
 /* Title */
