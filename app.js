@@ -189,6 +189,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const seenMessageIds = new Set();
   let currentPhotos = { host: [], visitor: [] }; // arrays of {id, uploadedAt}
   let lastBellPlay = 0;
+  let keepAliveInterval = null;
+  let lastKeepAliveAt = 0;
+  const KEEP_ALIVE_INTERVAL_MS = 4 * 60 * 1000;
 
   startBtn.textContent = isVisitor ? 'Join rooBell' : 'Start rooBell';
   document.body.classList.add(isVisitor ? 'visitor-mode' : 'host-mode');
@@ -220,6 +223,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     updatePhotoUI();
+  }
+
+  async function sendKeepAlive(force = false) {
+    if (isVisitor) return;
+
+    const now = Date.now();
+    if (!force && now - lastKeepAliveAt < 30_000) return;
+    lastKeepAliveAt = now;
+
+    try {
+      await fetch(`/api/rooms/${encodeURIComponent(roomId)}/keepalive?t=${now}`, {
+        cache: 'no-store',
+        keepalive: true
+      });
+    } catch {
+      if (!connected) {
+        statusEl.textContent = 'Reconnecting room or waking server...';
+      }
+    }
+  }
+
+  function startHostKeepAlive() {
+    if (isVisitor || keepAliveInterval) return;
+
+    sendKeepAlive(true);
+    keepAliveInterval = window.setInterval(() => {
+      sendKeepAlive();
+    }, KEEP_ALIVE_INTERVAL_MS);
+
+    window.addEventListener('focus', () => sendKeepAlive(true));
+    window.addEventListener('online', () => sendKeepAlive(true));
+    window.addEventListener('pageshow', () => sendKeepAlive(true));
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) sendKeepAlive(true);
+    });
   }
 
   function updatePhotoUI() {
@@ -805,6 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     showStoredMessages();
     connectToRoom();
+    startHostKeepAlive();
 
     // Make sure photo UI reflects current connection + any pre-existing photos
     updatePhotoUI();

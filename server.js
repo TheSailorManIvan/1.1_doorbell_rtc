@@ -85,6 +85,16 @@ function broadcast(roomId, data) {
   }
 }
 
+function handleKeepAlive(roomId, res) {
+  const room = getRoomClients(roomId);
+  sendJson(res, 200, {
+    ok: true,
+    room: roomId,
+    clients: room.clients.size,
+    serverTime: new Date().toISOString()
+  });
+}
+
 function addRoomPhoto(roomId, sender, dataUrl) {
   const room = rooms.get(roomId);
   if (!room) return;
@@ -314,9 +324,15 @@ async function handlePhotoUpload(roomId, req, res) {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const eventMatch = url.pathname.match(/^\/api\/rooms\/([^/]+)\/events$/);
+  const keepAliveMatch = url.pathname.match(/^\/api\/rooms\/([^/]+)\/keepalive$/);
 
   if (url.pathname === '/health') {
     sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (keepAliveMatch && req.method === 'GET') {
+    handleKeepAlive(decodeURIComponent(keepAliveMatch[1]), res);
     return;
   }
 
