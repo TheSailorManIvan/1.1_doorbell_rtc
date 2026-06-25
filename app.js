@@ -126,6 +126,28 @@ document.addEventListener('DOMContentLoaded', () => {
   const photoStatus = document.getElementById('photo-status');
   const multiPhotoButtons = document.getElementById('multi-photo-buttons');
   const chatHistory = document.getElementById('chat-history');
+  const circularBoard = document.querySelector('.circular-board');
+
+  if (circularBoard) {
+    let enlargeTimeout = null;
+    circularBoard.addEventListener('click', () => {
+      if (circularBoard.classList.contains('enlarged')) {
+        circularBoard.classList.remove('enlarged');
+        if (enlargeTimeout) {
+          clearTimeout(enlargeTimeout);
+          enlargeTimeout = null;
+        }
+      } else {
+        circularBoard.classList.add('enlarged');
+        playHappyBell();
+        if (enlargeTimeout) clearTimeout(enlargeTimeout);
+        enlargeTimeout = setTimeout(() => {
+          circularBoard.classList.remove('enlarged');
+          enlargeTimeout = null;
+        }, 3000);
+      }
+    });
+  }
 
   const statusEl = isVisitor ? visitorStatusEl : homeownerStatusEl;
   let eventSource = null;
@@ -266,6 +288,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     return true;
+  }
+
+  async function playHappyBell() {
+    if (!audioContext || audioContext.state !== 'running') return;
+    try {
+      const response = await fetch('sounds/3 happybell.mp3');
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      const source = audioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(audioContext.destination);
+      source.start(0);
+    } catch (err) {
+      console.warn('Could not play happybell sound:', err);
+    }
   }
 
   function stopRingSequence() {
