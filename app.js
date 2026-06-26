@@ -126,6 +126,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const enableSoundBtn = document.getElementById('enable-sound-btn');
   const uploadPhotoBtn = document.getElementById('upload-photo-btn');
   const photoInput = document.getElementById('photo-input');
+  const choosePhotoBtn = document.getElementById('choose-photo-btn');
+  const choosePhotoInput = document.getElementById('choose-photo-input');
   const viewPhotoBtn = document.getElementById('view-photo-btn');
   const photoStatus = document.getElementById('photo-status');
   const multiPhotoButtons = document.getElementById('multi-photo-buttons');
@@ -275,41 +277,40 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updatePhotoUI() {
-    const mySide = isVisitor ? 'visitor' : 'host';
-    const otherSide = isVisitor ? 'host' : 'visitor';
-
     // Upload is always available (once connected)
-    uploadPhotoBtn.disabled = !connected;
-    uploadPhotoBtn.textContent = 'Take photo of where I am';
-
-    if (isVisitor) {
-      // Visitor sees host's photo
-      const hostPhoto = currentPhotos['host'];
-      if (hostPhoto && hostPhoto.uploadedAt) {
-        viewPhotoBtn.style.display = 'inline-block';
-        viewPhotoBtn.disabled = !connected;
-        viewPhotoBtn.textContent = 'View host photo';
-        photoStatus.textContent = 'Host photo available';
-      } else {
-        viewPhotoBtn.style.display = 'none';
-        photoStatus.textContent = '';
-      }
-      if (multiPhotoButtons) multiPhotoButtons.innerHTML = '';
-    } else {
-      // Host hides single view, uses multi buttons for visitors
-      viewPhotoBtn.style.display = 'none';
-      renderMultiVisitorPhotos();
-    }
+    setPhotoButtonsBusy(false);
+    viewPhotoBtn.style.display = 'none';
+    renderPhotoGallery();
   }
 
-  function renderMultiVisitorPhotos() {
-    if (isVisitor || !multiPhotoButtons) return;
+  function renderPhotoGallery() {
+    if (!multiPhotoButtons) return;
+
     multiPhotoButtons.innerHTML = '';
-    const visitorKeys = Object.keys(currentPhotos).filter(k => k.startsWith('visitor-'));
-    visitorKeys.slice(0, 4).forEach((key, idx) => {
+    const photoButtons = [];
+    const hostPhoto = currentPhotos.host;
+    const visitorKeys = Object.keys(currentPhotos)
+      .filter(k => k.startsWith('visitor-'))
+      .sort((a, b) => {
+        const aTime = new Date(currentPhotos[a]?.uploadedAt || 0).getTime();
+        const bTime = new Date(currentPhotos[b]?.uploadedAt || 0).getTime();
+        return aTime - bTime;
+      })
+      .slice(0, 4);
+
+    if (hostPhoto && hostPhoto.uploadedAt) {
+      photoButtons.push({ sender: 'host', label: 'Host photo' });
+    }
+
+    visitorKeys.forEach((key, idx) => {
+      photoButtons.push({ sender: key, label: `Visitor ${idx + 1} photo` });
+    });
+
+    photoButtons.forEach(({ sender, label }) => {
       const btn = document.createElement('button');
-      btn.textContent = `Visitor ${idx + 1} photo`;
-      btn.onclick = () => showPhoto(key);
+      btn.disabled = !connected;
+      btn.textContent = label;
+      btn.onclick = () => showPhoto(sender);
       multiPhotoButtons.appendChild(btn);
     });
   }
@@ -423,24 +424,35 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.remove('ring-alert');
   }
 
+  function setPhotoButtonsBusy(isBusy, label = '') {
+    uploadPhotoBtn.disabled = isBusy || !connected;
+    choosePhotoBtn.disabled = isBusy || !connected;
+    uploadPhotoBtn.textContent = isBusy ? label : 'Take photo of where I am';
+    choosePhotoBtn.textContent = isBusy ? label : 'Upload existing photo';
+  }
+
+  function clearPhotoInputs() {
+    photoInput.value = '';
+    choosePhotoInput.value = '';
+  }
+
   async function uploadCurrentPhoto(file) {
     if (!connected || !file) return;
 
     // Client-side guard for very large files
     if (file.size > 6 * 1024 * 1024) {
       alert('Photo is very large (>6MB). Please choose a smaller image (under 5MB recommended).');
-      photoInput.value = '';
+      clearPhotoInputs();
       return;
     }
 
     try {
-      uploadPhotoBtn.disabled = true;
-      uploadPhotoBtn.textContent = 'Processing...';
+      setPhotoButtonsBusy(true, 'Processing...');
 
       // Resize/compress image client-side before upload (aim for good quality up to ~5MB originals)
       const resizedDataUrl = await resizeImage(file, 1600, 0.82);
 
-      uploadPhotoBtn.textContent = 'Uploading...';
+      setPhotoButtonsBusy(true, 'Uploading...');
 
       const res = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/photo`, {
         method: 'POST',
@@ -458,9 +470,8 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Photo upload failed: ' + err.message);
       photoStatus.textContent = '';
     } finally {
-      uploadPhotoBtn.disabled = !connected;
-      uploadPhotoBtn.textContent = 'Take photo of where I am';
-      photoInput.value = '';
+      setPhotoButtonsBusy(false);
+      clearPhotoInputs();
     }
   }
 
@@ -646,9 +657,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.sender === mySide) {
           photoStatus.textContent = 'Your photo uploaded (expires in ~3 min)';
         } else if (data.sender.startsWith('visitor-')) {
-          photoStatus.textContent = 'New visitor photo available';
+          photoStatus.textContent = 'Visitor photo available';
         } else {
-          photoStatus.textContent = 'New photo available';
+          photoStatus.textContent = 'Host photo available';
         }
       } else if (data.type === 'photo-removed' || data.type === 'photo-expired') {
         delete currentPhotos[data.sender];
@@ -707,32 +718,6 @@ document.addEventListener('DOMContentLoaded', () => {
           waitingBtn.disabled = false;
         }
       }, cooldownMs);
-    }
-  }
-
-  async function viewOtherPhoto() {
-    if (!connected) return;
-
-    if (isVisitor) {
-      // Visitor views the host's photo
-      const hostInfo = currentPhotos['host'];
-      if (!hostInfo) {
-        alert('No photo available');
-        return;
-      }
-      try {
-        viewPhotoBtn.disabled = true;
-        viewPhotoBtn.textContent = 'Loading...';
-        await showPhoto('host');
-      } catch (err) {
-        alert('Could not load photo: ' + err.message);
-      } finally {
-        viewPhotoBtn.disabled = !connected;
-        viewPhotoBtn.textContent = 'View host photo';
-      }
-    } else {
-      // Host should use the multi buttons instead
-      // This button is hidden for host
     }
   }
 
@@ -840,6 +825,11 @@ document.addEventListener('DOMContentLoaded', () => {
     photoInput.click();
   });
 
+  choosePhotoBtn.addEventListener('click', () => {
+    if (!connected) return;
+    choosePhotoInput.click();
+  });
+
   photoInput.addEventListener('change', () => {
     const file = photoInput.files[0];
     if (file) {
@@ -847,8 +837,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  viewPhotoBtn.addEventListener('click', () => {
-    viewOtherPhoto();
+  choosePhotoInput.addEventListener('change', () => {
+    const file = choosePhotoInput.files[0];
+    if (file) {
+      uploadCurrentPhoto(file);
+    }
   });
 
   messageInput.addEventListener('input', stopRingBecauseUserResponded);
