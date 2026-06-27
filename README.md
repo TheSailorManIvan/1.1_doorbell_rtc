@@ -11,9 +11,9 @@ https://one-1-doorbell-rtc.onrender.com
 
 ## Goals
 
-1 get working it on a cheap server after I get it working offline through just me wifi
+1 get it working  on a cheap server after I get it working offline through just my local wifi
 
-2 get the link generator functioning so i can copy paste of gogole keeps and open it on my phone
+2 get the link generator functioning so i test it on my phone
 
 3 implement QR code generator so i can scan the link on my phone and test more easily
 
@@ -37,3 +37,11 @@ https://one-1-doorbell-rtc.onrender.com
 2 experience with differient tiers of servers with the goal of keeping this webapp cheap (Render offers a more persistent server interaction while being free)
 
 3 unexpectedly needed to practice git commits since server options integrate github repos quite well 
+
+## Unexpected Learning
+* importance of git commands interaction when using a server
+* media query let's you control what you print
+* CSS animations, key frames let you dictate transoformations 0% 25% 100% of the animation time
+* render.com is cheap and good
+* you may need a way to keep the server connection alive like an invisible ping on the host side
+* you can do a lot with vanilla JS and CSS. 
