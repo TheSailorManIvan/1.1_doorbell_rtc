@@ -343,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
       .catch(() => {});
   }
 
-  function playTone(frequencies, duration = 0.18, gap = 0.08) {
+  function playTone(frequencies, duration = 0.18, gap = 0.08, peakGain = 0.18) {
     if (!audioContext || audioContext.state !== 'running') return false;
 
     const now = audioContext.currentTime;
@@ -356,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
       oscillator.type = 'sine';
       oscillator.frequency.setValueAtTime(frequency, start);
       gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.18, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(peakGain, start + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, end);
 
       oscillator.connect(gain);
@@ -524,16 +524,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const intervalMs = options.intervalMs || 3000;
     const toneDuration = options.toneDuration || 0.16;
     const gap = options.gap || 0.08;
+    const peakGain = options.peakGain || 0.54;
 
     stopRingSequence();
-    const played = playTone(frequencies, toneDuration, gap);
+    const played = playTone(frequencies, toneDuration, gap, peakGain);
 
     if (repeatForMs <= intervalMs) return played;
 
     stopRingBtn.style.display = 'inline-block';
 
     activeRingInterval = window.setInterval(() => {
-      playTone(frequencies, toneDuration, gap);
+      playTone(frequencies, toneDuration, gap, peakGain);
       flashRingAlert();
     }, intervalMs);
 
