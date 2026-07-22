@@ -524,7 +524,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const intervalMs = options.intervalMs || 3000;
     const toneDuration = options.toneDuration || 0.16;
     const gap = options.gap || 0.08;
-    const peakGain = options.peakGain || 0.54;
+    const peakGain = options.peakGain || 1.08;
 
     stopRingSequence();
     const played = playTone(frequencies, toneDuration, gap, peakGain);
