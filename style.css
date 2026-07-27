@@ -280,6 +280,14 @@ button:disabled {
   background-color: #b3261e;
 }
 
+#exit-room-btn {
+  background-color: #5f6368;
+}
+
+#exit-room-btn:hover {
+  background-color: #44484d;
+}
+
 /* Inputs */
 input[type="text"],
 input[type="file"],

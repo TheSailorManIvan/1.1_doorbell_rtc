@@ -123,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const waitingBtn = document.getElementById('waiting-btn');
   const ringBtn = document.getElementById('ring-btn');
   const stopRingBtn = document.getElementById('stop-ring-btn');
+  const exitRoomBtn = document.getElementById('exit-room-btn');
   const enableSoundBtn = document.getElementById('enable-sound-btn');
   const uploadPhotoBtn = document.getElementById('upload-photo-btn');
   const photoInput = document.getElementById('photo-input');
@@ -422,6 +423,23 @@ document.addEventListener('DOMContentLoaded', () => {
   function stopRingBecauseUserResponded() {
     stopRingSequence();
     document.body.classList.remove('ring-alert');
+  }
+
+  function exitCurrentRoom() {
+    const message = isVisitor
+      ? 'Exit this visitor room and create your own rooBell room?'
+      : 'Exit this host room and create a fresh rooBell room?';
+
+    if (!window.confirm(message)) return;
+
+    stopRingBecauseUserResponded();
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+
+    localStorage.setItem('doorbellRoomId', generateRoomId());
+    window.location.href = window.location.pathname;
   }
 
   function setPhotoButtonsBusy(isBusy, label = '') {
@@ -806,6 +824,8 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Could not send the ring.');
     });
   });
+
+  exitRoomBtn.addEventListener('click', exitCurrentRoom);
 
   stopRingBtn.addEventListener('pointerdown', handleStopRingControl);
   stopRingBtn.addEventListener('touchstart', handleStopRingControl);
