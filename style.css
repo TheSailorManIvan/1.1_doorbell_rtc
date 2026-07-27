@@ -198,6 +198,12 @@ h1 {
   margin: 4px 0 0;
 }
 
+#exit-room-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0 0;
+}
+
 #multi-photo-buttons {
   margin-top: 8px;
   display: flex;
@@ -282,7 +288,9 @@ button:disabled {
 
 #exit-room-btn {
   background-color: #5f6368;
-  margin-top: 16px;
+  font-size: 13px;
+  margin: 0;
+  padding: 7px 12px;
 }
 
 #exit-room-btn:hover {
@@ -539,6 +547,10 @@ body.visitor-mode #homeowner-status {
 
   #chat-composer button {
     width: 100%;
+  }
+
+  #exit-room-btn {
+    width: auto;
   }
 
   #host-jump-row,
