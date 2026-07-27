@@ -282,6 +282,7 @@ button:disabled {
 
 #exit-room-btn {
   background-color: #5f6368;
+  margin-top: 16px;
 }
 
 #exit-room-btn:hover {
