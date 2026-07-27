@@ -343,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
       .catch(() => {});
   }
 
-  function playTone(frequencies, duration = 0.18, gap = 0.08, peakGain = 0.18) {
+  function playTone(frequencies, duration = 0.18, gap = 0.08, peakGain = 0.18, waveform = 'sine') {
     if (!audioContext || audioContext.state !== 'running') return false;
 
     const now = audioContext.currentTime;
@@ -353,7 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const start = now + index * (duration + gap);
       const end = start + duration;
 
-      oscillator.type = 'sine';
+      oscillator.type = waveform;
       oscillator.frequency.setValueAtTime(frequency, start);
       gain.gain.setValueAtTime(0.0001, start);
       gain.gain.exponentialRampToValueAtTime(peakGain, start + 0.02);
@@ -524,17 +524,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const intervalMs = options.intervalMs || 3000;
     const toneDuration = options.toneDuration || 0.16;
     const gap = options.gap || 0.08;
-    const peakGain = options.peakGain || 1.08;
+    const peakGain = options.peakGain || 0.85;
+    const waveform = options.waveform || 'square';
 
     stopRingSequence();
-    const played = playTone(frequencies, toneDuration, gap, peakGain);
+    const played = playTone(frequencies, toneDuration, gap, peakGain, waveform);
 
     if (repeatForMs <= intervalMs) return played;
 
     stopRingBtn.style.display = 'inline-block';
 
     activeRingInterval = window.setInterval(() => {
-      playTone(frequencies, toneDuration, gap, peakGain);
+      playTone(frequencies, toneDuration, gap, peakGain, waveform);
       flashRingAlert();
     }, intervalMs);
 
@@ -575,10 +576,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     flashRingAlert();
     const played = isWaitingRing
-      ? playRingSequence([880, 660], { repeatForMs: 0, toneDuration: 0.12, gap: 0.05 })
+      ? playRingSequence([880, 660], { repeatForMs: 0, toneDuration: 0.18, gap: 0.05 })
       : data.sender === 'host'
-        ? playRingSequence([784, 988], { repeatForMs: 20_000, intervalMs: 2500, toneDuration: 0.14, gap: 0.07 })
-        : playRingSequence([659, 523, 659, 523], { repeatForMs: 20_000, intervalMs: 3000, toneDuration: 0.16, gap: 0.08 });
+        ? playRingSequence([784, 988, 784], { repeatForMs: 20_000, intervalMs: 2500, toneDuration: 0.2, gap: 0.06 })
+        : playRingSequence([659, 523, 659, 523], { repeatForMs: 20_000, intervalMs: 3000, toneDuration: 0.22, gap: 0.07 });
 
     if (!played) {
       enableSoundBtn.textContent = 'Enable Sound for Ring';
