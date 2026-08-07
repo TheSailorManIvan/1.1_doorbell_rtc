@@ -1,580 +1,130 @@
-function generateRoomId() {
-  if (window.crypto && window.crypto.randomUUID) {
-    return window.crypto.randomUUID().replace(/-/g, '').slice(0, 8);
-  }
-  return Math.random().toString(36).slice(2, 10);
-}
-
-function getShareableLink(roomId) {
-  const url = new URL(window.location.href);
-  url.searchParams.set('room', roomId);
-  return url.toString();
-}
-
-function showQRCode(link) {
-  const container = document.getElementById('qrcode');
-  if (!container) return;
-
-  container.innerHTML = '';
-
-  const qrImage = document.createElement('img');
-  qrImage.alt = 'QR code for the visitor doorbell link';
-  qrImage.src = `/api/qr.svg?text=${encodeURIComponent(link)}`;
-  qrImage.width = 240;
-  qrImage.height = 240;
-
-  const openLink = document.createElement('a');
-  openLink.href = link;
-  openLink.textContent = 'Open visitor link';
-  openLink.target = '_blank';
-  openLink.rel = 'noopener';
-
-  container.append(qrImage, openLink);
-}
-
-function appendMessage(chatHistory, text, className = '') {
-  const msgDiv = document.createElement('div');
-  msgDiv.className = className;
-  msgDiv.textContent = text;
-  chatHistory.appendChild(msgDiv);
-  chatHistory.scrollTop = chatHistory.scrollHeight;
-}
-
-function getStoredMessages(roomId) {
-  try {
-    return JSON.parse(localStorage.getItem(`doorbellMessages:${roomId}`) || '[]');
-  } catch {
-    return [];
-  }
-}
-
-function storeMessage(roomId, message) {
-  const messages = getStoredMessages(roomId);
-  if (messages.some((storedMessage) => storedMessage.id === message.id)) return;
-
-  messages.push(message);
-  localStorage.setItem(`doorbellMessages:${roomId}`, JSON.stringify(messages.slice(-50)));
-}
-
-function renderMessage(chatHistory, message) {
-  if (message.type === 'ring') {
-    const text = message.variant === 'waiting'
-      ? 'Visitor is waiting at the door'
-      : message.sender === 'host'
-        ? 'Host pinged the visitor'
-        : 'Visitor rang the doorbell';
-    appendMessage(chatHistory, text, 'ring-message');
-    return;
-  }
-
-  const label = message.sender === 'host' ? 'Host' : 'Visitor';
-  appendMessage(
-    chatHistory,
-    `${label}: ${message.text}`,
-    message.sender === 'host' ? 'host-message' : 'visitor-message'
-  );
-}
-
-async function sendRoomEvent(roomId, payload) {
-  const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/events`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-
-  if (!response.ok) {
-    throw new Error(`Send failed: ${response.status}`);
-  }
-}
+import {
+  createFreshStoredRoom,
+  createInitialState,
+  getShareableLink,
+  getStoredMessages,
+  isVisitorSender,
+  storeMessage
+} from './model.js';
+import {
+  createRoomEventSource,
+  fetchPhoto,
+  sendKeepAlive,
+  sendRoomEvent,
+  uploadPhoto
+} from './api.js';
+import { createDoorbellAudio } from './audio.js';
+import {
+  clearPhotoInputs,
+  configureInitialView,
+  enterAppView,
+  flashRingAlert,
+  getElements,
+  renderMessage,
+  renderPhotoGallery,
+  resizeImage,
+  setConnectionView,
+  setPhotoButtonsBusy,
+  setSoundButtonEnabled,
+  showPhotoModal,
+  showQRCode,
+  showStopRingButton,
+  stopRingAlert
+} from './view.js';
 
 document.addEventListener('DOMContentLoaded', () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const roomFromUrl = urlParams.get('room');
-  const isVisitor = Boolean(roomFromUrl);
-
-  let mySender = isVisitor ? 'visitor' : 'host';
-  if (isVisitor) {
-    let vId = localStorage.getItem('doorbellVisitorId');
-    if (!vId) {
-      vId = 'v' + Math.random().toString(36).substr(2, 8);
-      localStorage.setItem('doorbellVisitorId', vId);
-    }
-    mySender = `visitor-${vId}`;
-  }
-  const roomId = roomFromUrl || localStorage.getItem('doorbellRoomId') || generateRoomId();
-
-  localStorage.setItem('doorbellRoomId', roomId);
-
-  const startSection = document.getElementById('start-section');
-  const startBtn = document.getElementById('start-btn');
-  const startPrompt = document.getElementById('start-prompt');
-  const generateBtn = document.getElementById('generate-btn');
-  const printQrBtn = document.getElementById('print-qr-btn');
-  const linkDisplay = document.getElementById('link-display');
-  const homeownerSection = document.getElementById('homeowner-section');
-  const visitorSection = document.getElementById('visitor-section');
-  const hostJumpRow = document.getElementById('host-jump-row');
-  const hostBackRow = document.getElementById('host-back-row');
-  const soundSection = document.getElementById('sound-section');
-  const homeownerStatusEl = document.getElementById('homeowner-status');
-  const visitorStatusEl = document.getElementById('visitor-status');
-  const messageInput = document.getElementById('message-input');
-  const sendBtn = document.getElementById('send-btn');
-  const waitingBtn = document.getElementById('waiting-btn');
-  const ringBtn = document.getElementById('ring-btn');
-  const stopRingBtn = document.getElementById('stop-ring-btn');
-  const exitRoomBtn = document.getElementById('exit-room-btn');
-  const enableSoundBtn = document.getElementById('enable-sound-btn');
-  const uploadPhotoBtn = document.getElementById('upload-photo-btn');
-  const photoInput = document.getElementById('photo-input');
-  const choosePhotoBtn = document.getElementById('choose-photo-btn');
-  const choosePhotoInput = document.getElementById('choose-photo-input');
-  const viewPhotoBtn = document.getElementById('view-photo-btn');
-  const photoStatus = document.getElementById('photo-status');
-  const multiPhotoButtons = document.getElementById('multi-photo-buttons');
-  const chatHistory = document.getElementById('chat-history');
-  const circularBoard = document.querySelector('.circular-board');
-
-  const HEADER_ENLARGE_DURATION_MS = 2000;  // match the ~2s duration of 3 happybell.mp3
-
-  if (circularBoard) {
-    let enlargeTimeout = null;
-    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-
-    circularBoard.addEventListener('click', (e) => {
-      if (circularBoard.classList.contains('enlarged')) {
-        circularBoard.classList.remove('enlarged');
-        if (enlargeTimeout) {
-          clearTimeout(enlargeTimeout);
-          enlargeTimeout = null;
-        }
-        // Force reset on touch to clear any lingering hover state
-        if (isTouchDevice) {
-          circularBoard.style.transform = 'scale(1)';
-          setTimeout(() => {
-            if (!circularBoard.classList.contains('enlarged')) {
-              circularBoard.style.transform = '';
-            }
-          }, 50);
-        }
-      } else {
-        circularBoard.classList.add('enlarged');
-        playHappyBell();
-        if (enlargeTimeout) clearTimeout(enlargeTimeout);
-        enlargeTimeout = setTimeout(() => {
-          circularBoard.classList.remove('enlarged');
-          enlargeTimeout = null;
-          if (isTouchDevice) {
-            circularBoard.style.transform = 'scale(1)';
-            setTimeout(() => {
-              if (!circularBoard.classList.contains('enlarged')) {
-                circularBoard.style.transform = '';
-              }
-            }, 50);
-          }
-        }, HEADER_ENLARGE_DURATION_MS);
-      }
-    });
-
-    // Play sound on hover for symmetry (desktop only)
-    if (!isTouchDevice) {
-      circularBoard.addEventListener('mouseenter', () => {
-        playHappyBell();
-      });
-    }
-  }
-
-  const statusEl = isVisitor ? visitorStatusEl : homeownerStatusEl;
-  let eventSource = null;
-  let connected = false;
-  let audioContext = null;
-  let ringCooldownUntil = 0;
-  let activeRingInterval = null;
-  let activeRingTimeout = null;
-  const activeOscillators = new Set();
-  let soundWasEnabled = false;
-  const seenMessageIds = new Set();
-  let currentPhotos = { host: [], visitor: [] }; // arrays of {id, uploadedAt}
-  let lastBellPlay = 0;
-  let keepAliveInterval = null;
-  let lastKeepAliveAt = 0;
-  let lastPresenceReplyAt = 0;
+  const state = createInitialState();
+  const elements = getElements();
+  const audio = createDoorbellAudio();
+  const statusEl = state.isVisitor ? elements.visitorStatusEl : elements.homeownerStatusEl;
   const KEEP_ALIVE_INTERVAL_MS = 4 * 60 * 1000;
+  const HEADER_ENLARGE_DURATION_MS = 2000;
 
-  startPrompt.textContent = isVisitor ? 'Join rooBell' : 'Start rooBell';
-  startBtn.setAttribute('aria-label', startPrompt.textContent);
-  document.body.classList.add(isVisitor ? 'visitor-mode' : 'host-mode');
+  state.statusEl = statusEl;
+  configureInitialView(elements, state, getShareableLink(state.roomId));
 
-  function setVisitorControlsEnabled(enabled) {
-    sendBtn.disabled = !enabled;
-    waitingBtn.disabled = !enabled;
-    ringBtn.disabled = !enabled;
-  }
-
-  function setSoundButtonEnabled(enabled) {
-    soundWasEnabled = enabled;
-    enableSoundBtn.disabled = enabled;
-    enableSoundBtn.textContent = enabled ? 'Sound Enabled' : 'Enable Sound';
-  }
-
-  function setConnectionState(isConnected) {
-    connected = isConnected;
-
-    if (isVisitor) {
-      setVisitorControlsEnabled(isConnected);
-      statusEl.textContent = isConnected
-        ? 'Connected - send a message when you are ready'
-        : 'Connecting or waking server...';
-    } else {
-      statusEl.textContent = isConnected
-        ? 'Ready - share the link or QR code'
-        : 'Connecting room or waking server...';
-    }
-
-    updatePhotoUI();
+  function updateConnection(isConnected) {
+    state.connected = isConnected;
+    setConnectionView(elements, state, showPhoto);
   }
 
   function markVisitorPresent(data) {
-    if (isVisitor || !data || typeof data.sender !== 'string') return;
-
-    if (data.sender === 'visitor' || data.sender.startsWith('visitor-')) {
-      document.body.classList.add('visitor-present');
-    }
+    if (state.isVisitor || !data || !isVisitorSender(data.sender)) return;
+    document.body.classList.add('visitor-present');
   }
 
-  async function sendKeepAlive(force = false) {
-    if (isVisitor) return;
+  function updatePhotoUI() {
+    setPhotoButtonsBusy(elements, state.connected, false);
+    elements.viewPhotoBtn.style.display = 'none';
+    renderPhotoGallery(elements, state.currentPhotos, state.connected, showPhoto);
+  }
+
+  async function keepHostAwake(force = false) {
+    if (state.isVisitor) return;
 
     const now = Date.now();
-    if (!force && now - lastKeepAliveAt < 30_000) return;
-    lastKeepAliveAt = now;
+    if (!force && now - state.lastKeepAliveAt < 30_000) return;
+    state.lastKeepAliveAt = now;
 
     try {
-      await fetch(`/api/rooms/${encodeURIComponent(roomId)}/keepalive?t=${now}`, {
-        cache: 'no-store',
-        keepalive: true
-      });
+      await sendKeepAlive(state.roomId);
     } catch {
-      if (!connected) {
+      if (!state.connected) {
         statusEl.textContent = 'Reconnecting room or waking server...';
       }
     }
   }
 
   function startHostKeepAlive() {
-    if (isVisitor || keepAliveInterval) return;
+    if (state.isVisitor || state.keepAliveInterval) return;
 
-    sendKeepAlive(true);
-    keepAliveInterval = window.setInterval(() => {
-      sendKeepAlive();
-    }, KEEP_ALIVE_INTERVAL_MS);
+    keepHostAwake(true);
+    state.keepAliveInterval = window.setInterval(keepHostAwake, KEEP_ALIVE_INTERVAL_MS);
 
-    window.addEventListener('focus', () => sendKeepAlive(true));
-    window.addEventListener('online', () => sendKeepAlive(true));
-    window.addEventListener('pageshow', () => sendKeepAlive(true));
+    window.addEventListener('focus', () => keepHostAwake(true));
+    window.addEventListener('online', () => keepHostAwake(true));
+    window.addEventListener('pageshow', () => keepHostAwake(true));
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) sendKeepAlive(true);
-    });
-  }
-
-  function updatePhotoUI() {
-    // Upload is always available (once connected)
-    setPhotoButtonsBusy(false);
-    viewPhotoBtn.style.display = 'none';
-    renderPhotoGallery();
-  }
-
-  function renderPhotoGallery() {
-    if (!multiPhotoButtons) return;
-
-    multiPhotoButtons.innerHTML = '';
-    const photoButtons = [];
-    const hostPhoto = currentPhotos.host;
-    const visitorKeys = Object.keys(currentPhotos)
-      .filter(k => k.startsWith('visitor-'))
-      .sort((a, b) => {
-        const aTime = new Date(currentPhotos[a]?.uploadedAt || 0).getTime();
-        const bTime = new Date(currentPhotos[b]?.uploadedAt || 0).getTime();
-        return aTime - bTime;
-      })
-      .slice(0, 4);
-
-    if (hostPhoto && hostPhoto.uploadedAt) {
-      photoButtons.push({ sender: 'host', label: 'Host photo' });
-    }
-
-    visitorKeys.forEach((key, idx) => {
-      photoButtons.push({ sender: key, label: `Visitor ${idx + 1} photo` });
-    });
-
-    photoButtons.forEach(({ sender, label }) => {
-      const btn = document.createElement('button');
-      btn.disabled = !connected;
-      btn.textContent = label;
-      btn.onclick = () => showPhoto(sender);
-      multiPhotoButtons.appendChild(btn);
+      if (!document.hidden) keepHostAwake(true);
     });
   }
 
   async function enableSound() {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) {
-      enableSoundBtn.textContent = 'Sound Unavailable';
-      enableSoundBtn.disabled = true;
+    const enabled = await audio.enableSound();
+    if (!enabled) {
+      elements.enableSoundBtn.textContent = 'Sound Unavailable';
+      elements.enableSoundBtn.disabled = true;
       return;
     }
-
-    audioContext = audioContext || new AudioContext();
-
-    if (audioContext.state === 'suspended') {
-      await audioContext.resume();
-    }
-
-    playTone([660], 0.06, 0.03);
-    setSoundButtonEnabled(true);
+    setSoundButtonEnabled(elements, true);
   }
 
   function enableSoundQuietly() {
-    if (soundWasEnabled) return;
-
-    enableSound()
-      .then(() => {
-        enableSoundBtn.textContent = 'Sound Ready';
+    audio.enableSoundQuietly()
+      .then((enabled) => {
+        if (enabled) {
+          elements.enableSoundBtn.disabled = true;
+          elements.enableSoundBtn.textContent = 'Sound Ready';
+        }
       })
       .catch(() => {});
   }
 
-  function playTone(frequencies, duration = 0.18, gap = 0.08, peakGain = 0.18, waveform = 'sine') {
-    if (!audioContext || audioContext.state !== 'running') return false;
-
-    const now = audioContext.currentTime;
-    frequencies.forEach((frequency, index) => {
-      const oscillator = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      const start = now + index * (duration + gap);
-      const end = start + duration;
-
-      oscillator.type = waveform;
-      oscillator.frequency.setValueAtTime(frequency, start);
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(peakGain, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, end);
-
-      oscillator.connect(gain);
-      gain.connect(audioContext.destination);
-      activeOscillators.add(oscillator);
-      oscillator.addEventListener('ended', () => {
-        activeOscillators.delete(oscillator);
-      });
-      oscillator.start(start);
-      oscillator.stop(end + 0.02);
-    });
-
-    return true;
-  }
-
-  async function playHappyBell() {
-    const now = Date.now();
-    if (now - lastBellPlay < 300) return; // subtle cooldown to prevent double-play
-    lastBellPlay = now;
-
-    if (!audioContext) return;
-    if (audioContext.state === 'suspended') {
-      try { await audioContext.resume(); } catch {}
-    }
-    if (audioContext.state !== 'running') return;
-    try {
-      const response = await fetch('1%20sound/3%20happybell.mp3');
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      const source = audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioContext.destination);
-      source.start(0);
-    } catch (err) {
-      console.warn('Could not play happybell sound:', err);
-    }
-  }
-
-  function stopRingSequence() {
-    if (activeRingInterval) {
-      window.clearInterval(activeRingInterval);
-      activeRingInterval = null;
-    }
-
-    if (activeRingTimeout) {
-      window.clearTimeout(activeRingTimeout);
-      activeRingTimeout = null;
-    }
-
-    for (const oscillator of activeOscillators) {
-      try {
-        oscillator.stop();
-      } catch {
-        // The oscillator may already have stopped naturally.
-      }
-    }
-
-    activeOscillators.clear();
-
-    stopRingBtn.style.display = 'none';
-  }
-
   function stopRingBecauseUserResponded() {
-    stopRingSequence();
-    document.body.classList.remove('ring-alert');
-  }
-
-  function exitCurrentRoom() {
-    const message = isVisitor
-      ? 'Exit this visitor room and create your own rooBell room?'
-      : 'Exit this host room and create a fresh rooBell room?';
-
-    if (!window.confirm(message)) return;
-
-    stopRingBecauseUserResponded();
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
-
-    localStorage.setItem('doorbellRoomId', generateRoomId());
-    window.location.href = window.location.pathname;
-  }
-
-  function setPhotoButtonsBusy(isBusy, label = '') {
-    uploadPhotoBtn.disabled = isBusy || !connected;
-    choosePhotoBtn.disabled = isBusy || !connected;
-    uploadPhotoBtn.textContent = isBusy ? label : 'Take photo of where I am';
-    choosePhotoBtn.textContent = isBusy ? label : 'Upload existing photo';
-  }
-
-  function clearPhotoInputs() {
-    photoInput.value = '';
-    choosePhotoInput.value = '';
-  }
-
-  async function uploadCurrentPhoto(file) {
-    if (!connected || !file) return;
-
-    // Client-side guard for very large files
-    if (file.size > 6 * 1024 * 1024) {
-      alert('Photo is very large (>6MB). Please choose a smaller image (under 5MB recommended).');
-      clearPhotoInputs();
-      return;
-    }
-
-    try {
-      setPhotoButtonsBusy(true, 'Processing...');
-
-      // Resize/compress image client-side before upload (aim for good quality up to ~5MB originals)
-      const resizedDataUrl = await resizeImage(file, 1600, 0.82);
-
-      setPhotoButtonsBusy(true, 'Uploading...');
-
-      const res = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/photo`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sender: mySender, image: resizedDataUrl })
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Upload failed');
-      }
-
-      photoStatus.textContent = 'Photo uploaded (expires in 3 min)';
-    } catch (err) {
-      alert('Photo upload failed: ' + err.message);
-      photoStatus.textContent = '';
-    } finally {
-      setPhotoButtonsBusy(false);
-      clearPhotoInputs();
-    }
-  }
-
-  function resizeImage(file, maxWidth, quality) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      const reader = new FileReader();
-
-      reader.onload = (e) => {
-        img.src = e.target.result;
-      };
-
-      img.onload = () => {
-        let { width, height } = img;
-
-        // Downscale if needed
-        if (width > maxWidth) {
-          height = Math.round(height * (maxWidth / width));
-          width = maxWidth;
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-
-        let dataUrl = canvas.toDataURL('image/jpeg', quality);
-
-        // If still too big after first pass, reduce quality further
-        if (dataUrl.length > 5.5 * 1024 * 1024) {
-          dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-        }
-
-        resolve(dataUrl);
-      };
-
-      reader.readAsDataURL(file);
-    });
-  }
-
-  function handleStopRingControl(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    stopRingBecauseUserResponded();
+    audio.stopRingSequence();
+    stopRingAlert(elements);
   }
 
   function playRingSequence(frequencies, options = {}) {
-    const repeatForMs = options.repeatForMs || 0;
-    const intervalMs = options.intervalMs || 3000;
-    const toneDuration = options.toneDuration || 0.16;
-    const gap = options.gap || 0.08;
-    const peakGain = options.peakGain || 0.85;
-    const waveform = options.waveform || 'square';
-
-    stopRingSequence();
-    const played = playTone(frequencies, toneDuration, gap, peakGain, waveform);
-
-    if (repeatForMs <= intervalMs) return played;
-
-    stopRingBtn.style.display = 'inline-block';
-
-    activeRingInterval = window.setInterval(() => {
-      playTone(frequencies, toneDuration, gap, peakGain, waveform);
-      flashRingAlert();
-    }, intervalMs);
-
-    activeRingTimeout = window.setTimeout(() => {
-      stopRingSequence();
-    }, repeatForMs);
-
+    const played = audio.playRingSequence(frequencies, options, flashRingAlert);
+    if (options.repeatForMs && options.repeatForMs > (options.intervalMs || 3000)) {
+      showStopRingButton(elements);
+    }
     return played;
   }
 
-  function flashRingAlert() {
-    document.body.classList.remove('ring-alert');
-    void document.body.offsetWidth;
-    document.body.classList.add('ring-alert');
-    window.setTimeout(() => {
-      document.body.classList.remove('ring-alert');
-    }, 1400);
-  }
-
   function handleRing(data, fromStoredHistory = false) {
-    const isOwnRing = data.sender === (isVisitor ? 'visitor' : 'host');
+    const isOwnRing = data.sender === state.eventSender;
     const isWaitingRing = data.variant === 'waiting';
     const incomingText = data.sender === 'host'
       ? 'Host is calling you'
@@ -588,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
         : 'Ring sent to host';
 
     statusEl.textContent = isOwnRing ? sentText : incomingText;
-    renderMessage(chatHistory, data);
+    renderMessage(elements.chatHistory, data);
 
     if (isOwnRing || fromStoredHistory) return;
 
@@ -600,112 +150,129 @@ document.addEventListener('DOMContentLoaded', () => {
         : playRingSequence([659, 523, 659, 523], { repeatForMs: 20_000, intervalMs: 3000, toneDuration: 0.22, gap: 0.07 });
 
     if (!played) {
-      enableSoundBtn.textContent = 'Enable Sound for Ring';
+      elements.enableSoundBtn.textContent = 'Enable Sound for Ring';
     }
   }
 
   function showStoredMessages() {
-    for (const message of getStoredMessages(roomId)) {
-      if (seenMessageIds.has(message.id)) continue;
-      seenMessageIds.add(message.id);
+    for (const message of getStoredMessages(state.roomId)) {
+      if (state.seenMessageIds.has(message.id)) continue;
+      state.seenMessageIds.add(message.id);
 
       if (message.type === 'ring') {
         handleRing(message, true);
       } else {
-        renderMessage(chatHistory, message);
+        renderMessage(elements.chatHistory, message);
       }
     }
   }
 
+  function handlePresence(data) {
+    if (!state.isVisitor && data.sender === 'visitor') {
+      markVisitorPresent(data);
+      statusEl.textContent = 'Visitor is connected';
+    }
+
+    if (state.isVisitor && data.sender === 'host') {
+      statusEl.textContent = 'Host is waiting';
+      const now = Date.now();
+      if (now - state.lastPresenceReplyAt > 2000) {
+        state.lastPresenceReplyAt = now;
+        sendRoomEvent(state.roomId, {
+          sender: 'visitor',
+          type: 'presence'
+        }).catch(() => {});
+      }
+    }
+  }
+
+  function handleRoomEvent(data) {
+    if (data.type === 'presence') {
+      handlePresence(data);
+      return;
+    }
+
+    if (
+      data.type !== 'message' &&
+      data.type !== 'ring' &&
+      data.type !== 'photo' &&
+      data.type !== 'photo-removed' &&
+      data.type !== 'photo-expired'
+    ) {
+      return;
+    }
+
+    if (data.type === 'message' || data.type === 'ring') {
+      if (state.seenMessageIds.has(data.id)) return;
+      state.seenMessageIds.add(data.id);
+      storeMessage(state.roomId, data);
+    }
+
+    if (data.type === 'ring') {
+      markVisitorPresent(data);
+      handleRing(data);
+      return;
+    }
+
+    if (data.type === 'message') {
+      markVisitorPresent(data);
+      renderMessage(elements.chatHistory, data);
+      return;
+    }
+
+    if (data.type === 'photo') {
+      markVisitorPresent(data);
+      state.currentPhotos[data.sender] = { uploadedAt: data.uploadedAt };
+      updatePhotoUI();
+
+      if (data.sender === state.photoSender) {
+        elements.photoStatus.textContent = 'Your photo uploaded (expires in ~3 min)';
+      } else if (data.sender.startsWith('visitor-')) {
+        elements.photoStatus.textContent = 'Visitor photo available';
+      } else {
+        elements.photoStatus.textContent = 'Host photo available';
+      }
+      return;
+    }
+
+    delete state.currentPhotos[data.sender];
+    updatePhotoUI();
+    elements.photoStatus.textContent = data.sender === state.photoSender
+      ? 'Your photo expired'
+      : 'Photo expired';
+  }
+
   function connectToRoom() {
-    if (eventSource) eventSource.close();
+    if (state.eventSource) state.eventSource.close();
 
-    setConnectionState(false);
-    eventSource = new EventSource(`/api/rooms/${encodeURIComponent(roomId)}/events`);
+    updateConnection(false);
+    state.eventSource = createRoomEventSource(state.roomId);
 
-    eventSource.addEventListener('open', () => {
-      setConnectionState(true);
-      sendRoomEvent(roomId, {
-        sender: isVisitor ? 'visitor' : 'host',
+    state.eventSource.addEventListener('open', () => {
+      updateConnection(true);
+      sendRoomEvent(state.roomId, {
+        sender: state.eventSender,
         type: 'presence'
       }).catch(() => {});
     });
 
-    eventSource.addEventListener('message', (event) => {
-      const data = JSON.parse(event.data);
-
-      if (data.type === 'presence') {
-        if (!isVisitor && data.sender === 'visitor') {
-          markVisitorPresent(data);
-          statusEl.textContent = 'Visitor is connected';
-        }
-        if (isVisitor && data.sender === 'host') {
-          statusEl.textContent = 'Host is waiting';
-          const now = Date.now();
-          if (now - lastPresenceReplyAt > 2000) {
-            lastPresenceReplyAt = now;
-            sendRoomEvent(roomId, {
-              sender: 'visitor',
-              type: 'presence'
-            }).catch(() => {});
-          }
-        }
-        return;
-      }
-
-      if (data.type !== 'message' && data.type !== 'ring' && 
-          data.type !== 'photo' && data.type !== 'photo-removed' && data.type !== 'photo-expired') return;
-
-      if (data.type === 'message' || data.type === 'ring') {
-        if (seenMessageIds.has(data.id)) return;
-        seenMessageIds.add(data.id);
-        storeMessage(roomId, data);
-      }
-
-      if (data.type === 'ring') {
-        markVisitorPresent(data);
-        handleRing(data);
-      } else if (data.type === 'message') {
-        markVisitorPresent(data);
-        renderMessage(chatHistory, data);
-      } else if (data.type === 'photo') {
-        markVisitorPresent(data);
-        currentPhotos[data.sender] = { uploadedAt: data.uploadedAt };
-        updatePhotoUI();
-
-        const mySide = isVisitor ? 'visitor' : 'host';
-        if (data.sender === mySide) {
-          photoStatus.textContent = 'Your photo uploaded (expires in ~3 min)';
-        } else if (data.sender.startsWith('visitor-')) {
-          photoStatus.textContent = 'Visitor photo available';
-        } else {
-          photoStatus.textContent = 'Host photo available';
-        }
-      } else if (data.type === 'photo-removed' || data.type === 'photo-expired') {
-        delete currentPhotos[data.sender];
-        updatePhotoUI();
-        const mySide = isVisitor ? 'visitor' : 'host';
-        if (data.sender === mySide) {
-          photoStatus.textContent = 'Your photo expired';
-        } else {
-          photoStatus.textContent = 'Photo expired';
-        }
-      }
+    state.eventSource.addEventListener('message', (event) => {
+      handleRoomEvent(JSON.parse(event.data));
     });
 
-    eventSource.addEventListener('error', () => {
-      setConnectionState(false);
+    state.eventSource.addEventListener('error', () => {
+      updateConnection(false);
     });
   }
 
   async function sendMessage(text) {
-    if (!connected) {
+    if (!state.connected) {
       alert('Not connected yet - please wait');
       return;
     }
 
-    await sendRoomEvent(roomId, {
-      sender: isVisitor ? 'visitor' : 'host',
+    await sendRoomEvent(state.roomId, {
+      sender: state.eventSender,
       type: 'message',
       text
     });
@@ -713,104 +280,178 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function sendRing(variant = 'doorbell') {
     const now = Date.now();
-    if (now < ringCooldownUntil) return;
+    if (now < state.ringCooldownUntil) return;
 
-    if (!connected) {
+    if (!state.connected) {
       alert('Not connected yet - please wait');
       return;
     }
 
     const cooldownMs = variant === 'waiting' ? 3000 : 20_000;
-    ringCooldownUntil = now + cooldownMs;
-    ringBtn.disabled = true;
-    waitingBtn.disabled = true;
+    state.ringCooldownUntil = now + cooldownMs;
+    elements.ringBtn.disabled = true;
+    elements.waitingBtn.disabled = true;
 
     try {
-      await sendRoomEvent(roomId, {
-        sender: isVisitor ? 'visitor' : 'host',
+      await sendRoomEvent(state.roomId, {
+        sender: state.eventSender,
         type: 'ring',
         variant
       });
     } finally {
       window.setTimeout(() => {
-        if (connected) {
-          ringBtn.disabled = false;
-          waitingBtn.disabled = false;
+        if (state.connected) {
+          elements.ringBtn.disabled = false;
+          elements.waitingBtn.disabled = false;
         }
       }, cooldownMs);
     }
   }
 
   async function showPhoto(sender) {
-    const res = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/photo?sender=${sender}`);
-    if (!res.ok) throw new Error('Photo not available or expired');
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-
-    const modal = document.createElement('div');
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999;';
-    modal.innerHTML = `
-      <div style="background:white;padding:12px;border-radius:8px;max-width:90vw;max-height:90vh;">
-        <img src="${url}" style="max-width:80vw;max-height:70vh;display:block;margin-bottom:12px;border-radius:4px;" />
-        <button style="width:100%">Close</button>
-      </div>
-    `;
-    document.body.appendChild(modal);
-
-    const closeBtn = modal.querySelector('button');
-    const cleanup = () => {
-      URL.revokeObjectURL(url);
-      modal.remove();
-    };
-    closeBtn.onclick = cleanup;
-    modal.onclick = (e) => { if (e.target === modal) cleanup(); };
+    const blob = await fetchPhoto(state.roomId, sender);
+    showPhotoModal(blob);
   }
 
-  if (isVisitor) {
-    setVisitorControlsEnabled(false);
-  } else {
-    document.getElementById('visitor-greeting').textContent = 'Host reply';
-    ringBtn.textContent = 'Ping Visitor';
-    waitingBtn.style.display = 'none';
-    visitorStatusEl.style.display = 'none';
+  async function uploadCurrentPhoto(file) {
+    if (!state.connected || !file) return;
 
-    const link = getShareableLink(roomId);
-    linkDisplay.textContent = link;
-    showQRCode(link);
+    if (file.size > 6 * 1024 * 1024) {
+      alert('Photo is very large (>6MB). Please choose a smaller image (under 5MB recommended).');
+      clearPhotoInputs(elements);
+      return;
+    }
 
-    generateBtn.addEventListener('click', async () => {
-      const nextRoomId = generateRoomId();
-      localStorage.setItem('doorbellRoomId', nextRoomId);
-      const nextLink = getShareableLink(nextRoomId);
-      linkDisplay.textContent = nextLink;
-      showQRCode(nextLink);
+    try {
+      setPhotoButtonsBusy(elements, state.connected, true, 'Processing...');
+      const resizedDataUrl = await resizeImage(file, 1600, 0.82);
 
-      try {
-        await navigator.clipboard.writeText(nextLink);
+      setPhotoButtonsBusy(elements, state.connected, true, 'Uploading...');
+      await uploadPhoto(state.roomId, state.photoSender, resizedDataUrl);
+      elements.photoStatus.textContent = 'Photo uploaded (expires in 3 min)';
+    } catch (error) {
+      alert(`Photo upload failed: ${error.message}`);
+      elements.photoStatus.textContent = '';
+    } finally {
+      setPhotoButtonsBusy(elements, state.connected, false);
+      clearPhotoInputs(elements);
+    }
+  }
+
+  function generateNewHostRoom() {
+    const nextRoomId = createFreshStoredRoom();
+    const nextLink = getShareableLink(nextRoomId);
+    elements.linkDisplay.textContent = nextLink;
+    showQRCode(nextLink);
+
+    navigator.clipboard.writeText(nextLink)
+      .then(() => {
         alert('Link copied to clipboard.');
-      } catch {
+      })
+      .catch(() => {
         alert(`Copy this link manually:\n${nextLink}`);
+      })
+      .finally(() => {
+        window.location.href = window.location.pathname;
+      });
+  }
+
+  function exitCurrentRoom() {
+    const message = state.isVisitor
+      ? 'Exit this visitor room and create your own rooBell room?'
+      : 'Exit this host room and create a fresh rooBell room?';
+
+    if (!window.confirm(message)) return;
+
+    stopRingBecauseUserResponded();
+    if (state.eventSource) {
+      state.eventSource.close();
+      state.eventSource = null;
+    }
+
+    createFreshStoredRoom();
+    window.location.href = window.location.pathname;
+  }
+
+  function handleStopRingControl(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    stopRingBecauseUserResponded();
+  }
+
+  function setupHeaderLogo() {
+    if (!elements.circularBoard) return;
+
+    let enlargeTimeout = null;
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+    function clearTouchTransform() {
+      if (!isTouchDevice) return;
+
+      elements.circularBoard.style.transform = 'scale(1)';
+      setTimeout(() => {
+        if (!elements.circularBoard.classList.contains('enlarged')) {
+          elements.circularBoard.style.transform = '';
+        }
+      }, 50);
+    }
+
+    elements.circularBoard.addEventListener('click', () => {
+      if (elements.circularBoard.classList.contains('enlarged')) {
+        elements.circularBoard.classList.remove('enlarged');
+        if (enlargeTimeout) {
+          clearTimeout(enlargeTimeout);
+          enlargeTimeout = null;
+        }
+        clearTouchTransform();
+        return;
       }
 
-      window.location.href = window.location.pathname;
+      elements.circularBoard.classList.add('enlarged');
+      audio.playHappyBell();
+      if (enlargeTimeout) clearTimeout(enlargeTimeout);
+      enlargeTimeout = setTimeout(() => {
+        elements.circularBoard.classList.remove('enlarged');
+        enlargeTimeout = null;
+        clearTouchTransform();
+      }, HEADER_ENLARGE_DURATION_MS);
     });
+
+    if (!isTouchDevice) {
+      elements.circularBoard.addEventListener('mouseenter', () => {
+        audio.playHappyBell();
+      });
+    }
   }
 
-  sendBtn.addEventListener('click', () => {
-    const text = messageInput.value.trim();
+  function enterApp() {
+    enterAppView(elements, state.isVisitor);
+    showStoredMessages();
+    connectToRoom();
+    startHostKeepAlive();
+    updatePhotoUI();
+  }
+
+  setupHeaderLogo();
+
+  if (!state.isVisitor) {
+    elements.generateBtn.addEventListener('click', generateNewHostRoom);
+  }
+
+  elements.sendBtn.addEventListener('click', () => {
+    const text = elements.messageInput.value.trim();
     if (!text) return;
 
     sendMessage(text)
       .then(() => {
-        messageInput.value = '';
+        elements.messageInput.value = '';
       })
       .catch(() => {
         alert('Could not send the message. Check that the server is still running.');
       });
   });
 
-  waitingBtn.addEventListener('click', () => {
+  elements.waitingBtn.addEventListener('click', () => {
     Promise.all([
       sendMessage("I'm waiting at the door!"),
       sendRing('waiting')
@@ -819,90 +460,58 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  ringBtn.addEventListener('click', () => {
+  elements.ringBtn.addEventListener('click', () => {
     sendRing().catch(() => {
       alert('Could not send the ring.');
     });
   });
 
-  exitRoomBtn.addEventListener('click', exitCurrentRoom);
+  elements.exitRoomBtn.addEventListener('click', exitCurrentRoom);
 
-  stopRingBtn.addEventListener('pointerdown', handleStopRingControl);
-  stopRingBtn.addEventListener('touchstart', handleStopRingControl);
-  stopRingBtn.addEventListener('click', handleStopRingControl);
+  elements.stopRingBtn.addEventListener('pointerdown', handleStopRingControl);
+  elements.stopRingBtn.addEventListener('touchstart', handleStopRingControl);
+  elements.stopRingBtn.addEventListener('click', handleStopRingControl);
 
-  enableSoundBtn.addEventListener('click', () => {
+  elements.enableSoundBtn.addEventListener('click', () => {
     enableSound().catch(() => {
-      enableSoundBtn.textContent = 'Sound Blocked';
+      elements.enableSoundBtn.textContent = 'Sound Blocked';
     });
   });
 
-  printQrBtn.addEventListener('click', () => {
+  elements.printQrBtn.addEventListener('click', () => {
     window.print();
   });
 
-  // Photo upload
-  uploadPhotoBtn.addEventListener('click', () => {
-    if (!connected) return;
-    photoInput.click();
+  elements.uploadPhotoBtn.addEventListener('click', () => {
+    if (state.connected) elements.photoInput.click();
   });
 
-  choosePhotoBtn.addEventListener('click', () => {
-    if (!connected) return;
-    choosePhotoInput.click();
+  elements.choosePhotoBtn.addEventListener('click', () => {
+    if (state.connected) elements.choosePhotoInput.click();
   });
 
-  photoInput.addEventListener('change', () => {
-    const file = photoInput.files[0];
-    if (file) {
-      uploadCurrentPhoto(file);
-    }
+  elements.photoInput.addEventListener('change', () => {
+    const file = elements.photoInput.files[0];
+    if (file) uploadCurrentPhoto(file);
   });
 
-  choosePhotoInput.addEventListener('change', () => {
-    const file = choosePhotoInput.files[0];
-    if (file) {
-      uploadCurrentPhoto(file);
-    }
+  elements.choosePhotoInput.addEventListener('change', () => {
+    const file = elements.choosePhotoInput.files[0];
+    if (file) uploadCurrentPhoto(file);
   });
 
-  messageInput.addEventListener('input', stopRingBecauseUserResponded);
+  elements.messageInput.addEventListener('input', stopRingBecauseUserResponded);
 
-  messageInput.addEventListener('keydown', (event) => {
+  elements.messageInput.addEventListener('keydown', (event) => {
     stopRingBecauseUserResponded();
-    if (event.key === 'Enter') sendBtn.click();
+    if (event.key === 'Enter') elements.sendBtn.click();
   });
 
-  function enterApp() {
-    document.body.classList.add('app-started');
-    startSection.style.display = 'none';
-    soundSection.style.display = 'block';
-
-    if (isVisitor) {
-      homeownerSection.style.display = 'none';
-      hostJumpRow.style.display = 'none';
-      hostBackRow.style.display = 'none';
-      visitorSection.style.display = 'block';
-    } else {
-      homeownerSection.style.display = 'block';
-      hostJumpRow.style.display = 'flex';
-      hostBackRow.style.display = 'flex';
-      visitorSection.style.display = 'block';
-    }
-
-    showStoredMessages();
-    connectToRoom();
-    startHostKeepAlive();
-
-    // Make sure photo UI reflects current connection + any pre-existing photos
-    updatePhotoUI();
-  }
-
-  startBtn.addEventListener('click', () => {
-    if (startSection.classList.contains('is-starting')) return;
+  elements.startBtn.addEventListener('click', () => {
+    if (elements.startSection.classList.contains('is-starting')) return;
 
     enableSoundQuietly();
-    startSection.classList.add('is-starting');
+    elements.startSection.classList.add('is-starting');
     window.setTimeout(enterApp, 220);
   });
 });
